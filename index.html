@@ -1516,6 +1516,24 @@ function calcKPIs() {
   const ds = window.DS;
   const kpis = {};
 
+  // Validar que los datos existen antes de procesar
+  if (!ds) { console.error('calcKPIs: window.DS no existe'); return; }
+  ds.asiento       = ds.asiento       || [];
+  ds.pedidos        = ds.pedidos        || [];
+  ds.suscripciones  = ds.suscripciones  || [];
+  ds.clientes       = ds.clientes       || [];
+  ds.instalaciones  = ds.instalaciones  || [];
+  ds.tickets        = ds.tickets        || [];
+
+  console.log('calcKPIs iniciando —',
+    'asiento:', ds.asiento.length,
+    'pedidos:', ds.pedidos.length,
+    'suscripciones:', ds.suscripciones.length,
+    'clientes:', ds.clientes.length
+  );
+
+  try {
+
   /* ── Helpers ── */
   const toNum = v => {
     if (v === null || v === undefined || v === '') return 0;
@@ -2423,7 +2441,12 @@ function calcKPIs() {
   });
   kpis.conversionesMes = conversionesMes;
 
+  } catch(err) {
+    console.error('calcKPIs error:', err.message, err.stack);
+  }
+
   window.DS.kpis = kpis;
+  console.log('calcKPIs completado — KPIs calculados:', Object.keys(kpis).length);
 }
 
 /* ═══════════════════════════════════════════════════
@@ -3895,33 +3918,43 @@ function setSegHist(seg) {
 
 function renderHistorico() {
   const kpis = window.DS.kpis;
+  if (!kpis) return;
 
   // Construir serie completa de meses disponibles (unión de todas las fuentes)
+  const mrrMes     = kpis.mrrMes     || {};
+  const instMes    = kpis.instMes    || {};
+  const bajasMes   = kpis.bajasMes   || {};
+  const ventasMes  = kpis.ventasMes  || {};
+  const mrrPymeMes = kpis.mrrPymeMes || {};
+  const mrrCorpMes = kpis.mrrCorpMes || {};
+  const resNuevasMes = kpis.resNuevasMes || {};
+
   const todosMeses = [...new Set([
-    ...Object.keys(kpis.mrrMes||{}),
-    ...Object.keys(kpis.instMes||{}),
-    ...Object.keys(kpis.bajasMes||{}),
-    ...Object.keys(kpis.ventasMes||{}),
-  ])].sort().filter(m => m < '2026-04'); // excluir mes incompleto
+    ...Object.keys(mrrMes),
+    ...Object.keys(instMes),
+    ...Object.keys(bajasMes),
+    ...Object.keys(ventasMes),
+  ])].sort().filter(m => m < (kpis.mesEnCurso || '2099-01'));
 
-  const rango = todosMeses.length > 0
-    ? `${mesLabel(todosMeses[0])} → ${mesLabel(todosMeses[todosMeses.length-1])} · ${todosMeses.length} meses`
-    : '';
-  document.getElementById('hist-rango').textContent = rango;
+  if (todosMeses.length === 0) return; // sin datos aún
 
-  const labels   = todosMeses.map(mesLabel);
-  const serMRR   = todosMeses.map(m => +(kpis.mrrMes[m]||0).toFixed(0));
-  const serInst  = todosMeses.map(m => kpis.instMes[m]||0);
-  const serVDEK  = todosMeses.map(m => (kpis.ventasMes[m]?.vd||0)+(kpis.ventasMes[m]?.ek||0));
-  const serBajas = todosMeses.map(m => kpis.bajasMes[m]?.count||0);
-  const serNetas = serInst.map((v,i) => v - serBajas[i]);
-  const serBajasMRR = todosMeses.map(m => +(kpis.bajasMes[m]?.mrr||0).toFixed(0));
-  const serChurn = todosMeses.map(m => +(kpis.bajasMes[m]?.count||0) / Math.max(1,kpis.activosResid) * 100);
-  const serMA3MRR = serMRR.map((v,i) => i<2 ? null : Math.round((serMRR[i-2]+serMRR[i-1]+v)/3));
-  const serDeltaMRR = serMRR.map((v,i) => i===0 ? 0 : v - serMRR[i-1]);
-  const serPymeMes = todosMeses.map(m => +(kpis.mrrPymeMes[m]||0).toFixed(0));
-  const serCorpMes = todosMeses.map(m => +(kpis.mrrCorpMes[m]||0).toFixed(0));
-  const serResNuevas = todosMeses.map(m => kpis.resNuevasMes[m]||0);
+  const rango = `${mesLabel(todosMeses[0])} → ${mesLabel(todosMeses[todosMeses.length-1])} · ${todosMeses.length} meses`;
+  const elRango = document.getElementById('hist-rango');
+  if (elRango) elRango.textContent = rango;
+
+  const labels     = todosMeses.map(mesLabel);
+  const serMRR     = todosMeses.map(m => +(mrrMes[m]||0).toFixed(0));
+  const serInst    = todosMeses.map(m => instMes[m]||0);
+  const serVDEK    = todosMeses.map(m => (ventasMes[m]?.vd||0)+(ventasMes[m]?.ek||0));
+  const serBajas   = todosMeses.map(m => bajasMes[m]?.count||0);
+  const serNetas   = serInst.map((v,i) => v - serBajas[i]);
+  const serBajasMRR= todosMeses.map(m => +(bajasMes[m]?.mrr||0).toFixed(0));
+  const serChurn   = todosMeses.map(m => +(bajasMes[m]?.count||0) / Math.max(1, kpis.activosResid||1) * 100);
+  const serMA3MRR  = serMRR.map((v,i) => i<2 ? null : Math.round((serMRR[i-2]+serMRR[i-1]+v)/3));
+  const serDeltaMRR= serMRR.map((v,i) => i===0 ? 0 : v - serMRR[i-1]);
+  const serPymeMes = todosMeses.map(m => +(mrrPymeMes[m]||0).toFixed(0));
+  const serCorpMes = todosMeses.map(m => +(mrrCorpMes[m]||0).toFixed(0));
+  const serResNuevas= todosMeses.map(m => resNuevasMes[m]||0);
 
   // Stats MRR
   const mrrMax = Math.max(...serMRR);
@@ -4453,24 +4486,28 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('screen-upload').style.display = 'flex';
   document.querySelectorAll('.module').forEach(m => m.style.display = 'none');
 
-  // Panel Drive
+  // Panel Drive — verificar conexión (solo si hay URL configurada)
   if (APPS_SCRIPT_URL) {
     document.getElementById('drive-panel').style.display = 'block';
-    fetch(APPS_SCRIPT_URL + '?action=info')
-      .then(r => r.json())
+    // Verificar archivos disponibles en Drive
+    fetch(APPS_SCRIPT_URL + '?action=info', { mode: 'cors' })
+      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(info => {
-        const ok = Object.values(info.files||{}).filter(Boolean).length;
-        const total = Object.keys(info.files||{}).length;
-        document.getElementById('drive-info').textContent = `${ok}/${total} archivos en Drive`;
+        if (info.error) throw new Error(info.error);
+        const ok  = Object.values(info.files||{}).filter(Boolean).length;
+        const tot = Object.keys(info.files||{}).length;
+        document.getElementById('drive-info').textContent = `${ok}/${tot} archivos en Drive`;
         const fl = document.getElementById('drive-file-list');
         fl.innerHTML = Object.entries(info.files||{}).map(([k,f]) =>
           f ? `<div class="file-item"><span class="fi-name" style="font-size:11px">${f.name}</span><span class="fi-type">${new Date(f.updated).toLocaleDateString('es-SV')}</span><span class="fi-status fi-ok">✓</span></div>`
             : `<div class="file-item"><span class="fi-name">${k}</span><span class="fi-status fi-err">✗</span></div>`
         ).join('');
       })
-      .catch(() => {
-        document.getElementById('drive-info').textContent = 'Sin conexión · usa carga manual';
+      .catch(err => {
+        // Error de CORS o conexión — no bloquear el dashboard
+        document.getElementById('drive-info').textContent = 'Drive no disponible · usa carga manual';
         document.getElementById('btn-drive-load').disabled = true;
+        console.warn('Drive conexión:', err.message);
       });
   }
 
