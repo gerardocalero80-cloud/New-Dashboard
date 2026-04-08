@@ -441,6 +441,72 @@ tbody td.td-warn { color: var(--amber); }
 .badge-blue  { background: var(--blue-bg);   color: var(--blue);   border: 1px solid #0284c7; }
 .badge-gray  { background: var(--bg3);       color: var(--text3);  border: 1px solid var(--border2); }
 
+/* ── PENETRACIÓN MODULE ── */
+.penet-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.penet-bar-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  transition: box-shadow .15s;
+}
+.penet-bar-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+.penet-bar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+.penet-bar-name { font-size: 12px; font-weight: 600; color: var(--text1); }
+.penet-bar-pct  { font-size: 13px; font-weight: 700; color: var(--indigo); }
+.penet-track {
+  height: 8px;
+  background: var(--bg3);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.penet-fill-digilife {
+  height: 100%;
+  border-radius: 4px;
+  transition: width .4s ease;
+}
+.penet-meta {
+  display: flex;
+  gap: 10px;
+  font-size: 10px;
+  color: var(--text3);
+}
+.penet-meta span { display: flex; align-items: center; gap: 3px; }
+.penet-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.penet-status-alta   { background: rgba(22,163,74,0.15);  border-left: 3px solid var(--green); }
+.penet-status-media  { background: rgba(99,102,241,0.06); border-left: 3px solid var(--indigo); }
+.penet-status-baja   { background: rgba(217,119,6,0.08);  border-left: 3px solid var(--amber); }
+.penet-status-critica{ background: rgba(220,38,38,0.06);  border-left: 3px solid var(--red); }
+.alarm-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg2);
+  margin-bottom: 6px;
+}
+.alarm-semaforo { font-size: 18px; flex-shrink: 0; }
+.alarm-body { flex: 1; }
+.alarm-title { font-size: 12px; font-weight: 600; color: var(--text1); }
+.alarm-sub   { font-size: 11px; color: var(--text3); }
+.alarm-val   { font-size: 14px; font-weight: 700; }
+.alarm-ok    { border-left: 3px solid var(--green); }
+.alarm-warn  { border-left: 3px solid var(--amber); }
+.alarm-crit  { border-left: 3px solid var(--red); }
+
 /* ── MODAL DRILL-DOWN ── */
 #modal-overlay {
   display: none;
@@ -596,6 +662,7 @@ tbody td.td-warn { color: var(--amber); }
   <div class="nav-tab" data-mod="reservas">Reservas</div>
   <div class="nav-tab" data-mod="conciliacion">Conciliación</div>
   <div class="nav-tab" data-mod="historico">Histórico</div>
+  <div class="nav-tab" data-mod="penetracion">Penetración</div>
 </div>
 
 <!-- MAIN CONTENT -->
@@ -1225,6 +1292,88 @@ tbody td.td-warn { color: var(--amber); }
     </div>
   </div>
 
+  <!-- ══════════════ MÓDULO PENETRACIÓN ══════════════ -->
+  <div id="mod-penetracion" class="module" style="display:none">
+    <div class="kpi-grid" id="kpi-penet-top"></div>
+
+    <!-- Alarmas por segmento Odoo vs Wishup -->
+    <div class="chart-row cols-1" style="margin-bottom:16px">
+      <div class="chart-card">
+        <div class="section-header">
+          <div class="section-title">🚦 Alarmas Comerciales — Odoo vs Wishup por segmento</div>
+          <div class="section-meta" id="penet-alarmas-meta"></div>
+        </div>
+        <div id="penet-alarmas-container" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px;margin-top:8px"></div>
+      </div>
+    </div>
+
+    <!-- Barras de penetración por proyecto -->
+    <div class="chart-row cols-1">
+      <div class="chart-card">
+        <div class="section-header">
+          <div class="section-title">Penetración por Proyecto</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <select id="penet-filtro" style="padding:5px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text1);font-size:12px" onchange="renderPenetBarras()">
+              <option value="todos">Todos</option>
+              <option value="abiertos">Solo abiertos</option>
+              <option value="alta">Alta (&gt;40%)</option>
+              <option value="baja">Baja (&lt;20%)</option>
+            </select>
+            <select id="penet-orden" style="padding:5px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text1);font-size:12px" onchange="renderPenetBarras()">
+              <option value="pct">Por % penetración</option>
+              <option value="casas">Por total casas</option>
+              <option value="digilife">Por clientes DigiLife</option>
+            </select>
+          </div>
+        </div>
+        <div id="penet-barras-grid" class="penet-grid" style="margin-top:12px"></div>
+      </div>
+    </div>
+
+    <!-- Scatter DigiLife vs Competencia + Donut distribución -->
+    <div class="chart-row cols-2">
+      <div class="chart-card">
+        <div class="cc-header"><div><div class="cc-title">DigiLife vs Competencia por Proyecto</div><div class="cc-sub">Burbuja = total de casas · clic para detalle</div></div></div>
+        <div class="chart-wrap" style="height:280px"><canvas id="chart-penet-scatter"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="cc-header"><div><div class="cc-title">Distribución total de casas</div><div class="cc-sub">DigiLife · Competencia · Suspendidos · Deshabitadas</div></div></div>
+        <div class="chart-wrap" style="height:280px"><canvas id="chart-penet-donut"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Tabla completa 30 proyectos -->
+    <div class="chart-row cols-1">
+      <div class="chart-card">
+        <div class="section-header">
+          <div class="section-title">Detalle por Proyecto</div>
+          <div class="section-meta" id="penet-table-meta"></div>
+        </div>
+        <div class="table-wrap" style="max-height:420px;overflow-y:auto">
+          <table id="tbl-penet">
+            <thead style="position:sticky;top:0;background:var(--bg3)">
+              <tr>
+                <th>Proyecto</th>
+                <th>Tipo</th>
+                <th class="td-num">Total Casas</th>
+                <th class="td-num">Habitadas</th>
+                <th class="td-num">DigiLife</th>
+                <th class="td-num">Competencia</th>
+                <th class="td-num">Suspendidos</th>
+                <th class="td-num">Deshabitadas</th>
+                <th class="td-num">% Pentr.</th>
+                <th class="td-num">Mkt Share</th>
+                <th>Nivel</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-penet"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- ══════════════ /MÓDULO PENETRACIÓN ══════════════ -->
+
 </div><!-- /main -->
 
 <!-- MODAL DRILL-DOWN -->
@@ -1346,6 +1495,14 @@ window.DS = {
 /* ═══════════════════════════════════════════════════
    NAVEGACIÓN
 ═══════════════════════════════════════════════════ */
+// Módulos que se renderizan lazily al primer clic (canvas requiere visibilidad)
+const _lazyRendered = {};
+const _lazyRenderFns = {
+  conciliacion: () => { if (window.DS?.loaded) renderConciliacion(); },
+  historico:    () => { if (window.DS?.loaded) renderHistorico(); },
+  penetracion:  () => { if (window.DS?.loaded) renderPenetracion(); },
+};
+
 document.querySelectorAll('.nav-tab').forEach(tab => {
   tab.addEventListener('click', () => {
     document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
@@ -1354,6 +1511,11 @@ document.querySelectorAll('.nav-tab').forEach(tab => {
     document.querySelectorAll('.module').forEach(m => m.style.display = 'none');
     const el = document.getElementById('mod-' + mod);
     if (el) el.style.display = 'block';
+    // Lazy render: renderizar al mostrar el tab (canvas necesita estar visible)
+    if (_lazyRenderFns[mod] && !_lazyRendered[mod]) {
+      _lazyRendered[mod] = true;
+      setTimeout(_lazyRenderFns[mod], 50);
+    }
   });
 });
 
@@ -1545,6 +1707,7 @@ function calcKPIs() {
   ds.clientes       = ds.clientes       || [];
   ds.instalaciones  = ds.instalaciones  || [];
   ds.tickets        = ds.tickets        || [];
+  ds.penetracion    = ds.penetracion    || [];   // opcional — se carga con V8
 
   console.log('calcKPIs iniciando —',
     'asiento:', ds.asiento.length,
@@ -1727,6 +1890,38 @@ function calcKPIs() {
   });
   kpis.ventasMes = ventasMes;
 
+  /* ── MTD COMERCIAL: ventas mes actual vs mismo día mes anterior ── */
+  const fcMTD    = kpis.fechaCorte || hoy;   // T-1
+  const diaCorte = fcMTD.getDate();
+  const [anioMTD, mesMTDnum] = mesKey(fcMTD).split('-').map(Number);
+  const mesActualKey = mesKey(fcMTD);
+  const mesPrevMTD   = anioMTD + '-' + String(mesMTDnum === 1 ? 12 : mesMTDnum - 1).padStart(2,'0');
+
+  const pedMTD = pedidosOp.filter(r => {
+    const d = toDate(r['Fecha de Creación']);
+    return d && mesKey(d) === mesActualKey && d.getDate() <= diaCorte;
+  });
+  const pedMTDprev = pedidosOp.filter(r => {
+    const d = toDate(r['Fecha de Creación']);
+    return d && mesKey(d) === mesPrevMTD && d.getDate() <= diaCorte;
+  });
+
+  kpis.mtdVentas    = pedMTD.length;
+  kpis.mtdMonto     = pedMTD.reduce((s,r) => s + toNum(r['Total']), 0);
+  kpis.mtdVentasPrev= pedMTDprev.length;
+  kpis.mtdMontoPrev = pedMTDprev.reduce((s,r) => s + toNum(r['Total']), 0);
+  kpis.diaCorte     = diaCorte;
+  kpis.mesActualKey = mesActualKey;
+  kpis.mesPrevKey   = mesPrevMTD;
+
+  // Pace: proyección al cierre del mes
+  const diasDelMes  = new Date(anioMTD, mesMTDnum, 0).getDate();
+  kpis.paceVentas   = diaCorte > 0 ? Math.round(kpis.mtdVentas / diaCorte * diasDelMes) : 0;
+  kpis.diasDelMes   = diasDelMes;
+
+  // ASPU (Average Selling Price per Unit) mes actual MTD
+  kpis.aspuMTD = kpis.mtdVentas > 0 ? kpis.mtdMonto / kpis.mtdVentas : 0;
+
   // Canal (Interna/Externa)
   const canalData = { Interna: 0, Externa: 0 };
   pedidosOp.forEach(r => {
@@ -1809,6 +2004,20 @@ function calcKPIs() {
     ? kpis.mrrActivoResid / kpis.activosResid
     : (PARAMS.arpuOverride || 27.63);
   if (PARAMS.arpuOverride > 0) kpis.arpuResid = PARAMS.arpuOverride;
+
+  // ARPU por proyecto (suscripciones activas residenciales)
+  const arpuPorProy  = {};
+  const countPorProy = {};
+  subResid.forEach(r => {
+    const p = String(r['Proyectos']||'Sin proyecto').trim();
+    const mrr = toNum(r['Total recurrente']);
+    arpuPorProy[p]  = (arpuPorProy[p]  || 0) + mrr;
+    countPorProy[p] = (countPorProy[p] || 0) + 1;
+  });
+  kpis.arpuPorProy = {};
+  Object.keys(arpuPorProy).forEach(p => {
+    kpis.arpuPorProy[p] = countPorProy[p] > 0 ? arpuPorProy[p] / countPorProy[p] : 0;
+  });
 
   // Suspendidos residencial
   const suspendidos = ds.suscripciones.filter(r =>
@@ -1978,7 +2187,7 @@ function calcKPIs() {
 
   // ── MES EN CURSO: acumulado parcial + comparativo de paridad ──
   const mesEnCurso = kpis.mesEnCurso;
-  const diaCorte   = kpis.diaCorte;
+  // diaCorte ya declarado arriba en sección MTD comercial
 
   // Acumulado mes en curso (residencial recurrente hasta día de corte)
   let acumMesActual = 0, acumMesActualNoRec = 0;
@@ -2324,10 +2533,10 @@ function calcKPIs() {
       .replace(/\s+/g,' ').trim();
   }
 
-  // Construir índice Wishup por nombre normalizado
+  // Construir índice Wishup por nombre normalizado (con fallbacks de campo)
   const whIdx = {};
   ds.clientes.forEach((r,i) => {
-    const n = normNombre(r['Nombre']);
+    const n = normNombre(r['Nombre'] || r['Nombre del Cliente'] || r['Cliente'] || r['nombre']);
     if (!n) return;
     if (!whIdx[n]) whIdx[n] = [];
     whIdx[n].push(i);
@@ -2363,7 +2572,7 @@ function calcKPIs() {
         nombreOdoo:  r['Nombre del Cliente'] || r['Cliente'] || '',
         proyOdoo,
         estadoOdoo,
-        nombreWh:    wh ? (wh['Nombre']||'') : '',
+        nombreWh:    wh ? (wh['Nombre']||wh['Nombre del Cliente']||wh['Cliente']||'') : '',
         estadoWh:    wh ? String(wh['Estado']||'').trim() : '',
         proyWh:      wh ? String(wh['Router']||'').split('//')[0].split('/')[0].trim() : '',
         confianza,
@@ -2377,6 +2586,46 @@ function calcKPIs() {
   kpis.totalMatch      = totalMatch;
   kpis.totalPosible    = totalPosible;
   kpis.totalSinMatch   = totalSinMatch;
+
+  /* ── PENETRACIÓN ── */
+  if (ds.penetracion && ds.penetracion.length > 0) {
+    const pRows = ds.penetracion;
+    const col = n => { // buscar columna flexible
+      const keys = ['PROYECTO','Proyecto','proyecto'];
+      if (n === 'PROYECTO') return pRows[0] && (pRows[0]['PROYECTO'] !== undefined ? 'PROYECTO' : keys.find(k => pRows[0][k] !== undefined) || 'PROYECTO');
+      return n;
+    };
+    kpis.penetracionRows = pRows.map(r => ({
+      proyecto:    String(r['PROYECTO']||r['Proyecto']||'').trim(),
+      tipo:        String(r['PROYECTOS ABIERTOS / CERRADOS']||r['Tipo']||'').trim(),
+      totalCasas:  toNum(r['TOTAL DE CASAS POR PROYECTO']||r['Total Casas']||0),
+      habitadas:   toNum(r['HABITADAS']||r['Habitadas']||0),
+      digilife:    toNum(r['CON DIGILIFE']||r['DigiLife']||0),
+      competencia: toNum(r['CON LA COMPETENCIA']||r['Competencia']||0),
+      suspendidos: toNum(r['Suspendidos']||0),
+      flexibles:   toNum(r['Flexibles']||0),
+      deshabitadas:toNum(r['DESHABITADAS']||r['Deshabitadas']||0),
+      enAlquiler:  toNum(r['EN ALQUILER']||r['En alquiler']||0),
+      pctPenetr:   toNum(r['PORCENTAJE DE PENETRACIÓN']||r['%']||0),
+    }));
+
+    const totC = kpis.penetracionRows.reduce((s,r) => s + r.totalCasas, 0);
+    const totD = kpis.penetracionRows.reduce((s,r) => s + r.digilife, 0);
+    const totComp = kpis.penetracionRows.reduce((s,r) => s + r.competencia, 0);
+    const totHab  = kpis.penetracionRows.reduce((s,r) => s + r.habitadas, 0);
+    const totSusp = kpis.penetracionRows.reduce((s,r) => s + r.suspendidos, 0);
+    kpis.penet_totalCasas  = totC;
+    kpis.penet_digilife    = totD;
+    kpis.penet_competencia = totComp;
+    kpis.penet_habitadas   = totHab;
+    kpis.penet_suspendidos = totSusp;
+    kpis.penet_pctTotal    = totC > 0 ? totD / totC * 100 : 0;
+    kpis.penet_pctHabitadas= totHab > 0 ? totD / totHab * 100 : 0;
+    kpis.penet_mktShare    = (totD + totComp) > 0 ? totD / (totD + totComp) * 100 : 0;
+    kpis.penet_mrrRiesgo   = totSusp * (kpis.arpuResid || 27.63);
+  } else {
+    kpis.penetracionRows = [];
+  }
 
   /* ── Datos pequeños para renders — sobreviven al caché ── */
   // Cartera PYME por estado (para chart donut)
@@ -2521,7 +2770,62 @@ function renderKPIsVentasResumen(kpis) {
     ? `${kpis.ventasYoY >= 0 ? '+' : ''}${(kpis.ventasYoY*100).toFixed(1)}%`
     : null;
 
+  // KPIs MTD comerciales
+  const mtd     = kpis.mtdVentas || 0;
+  const mtdPrev = kpis.mtdVentasPrev || 0;
+  const mtdDelta = mtdPrev > 0 ? (mtd - mtdPrev) / mtdPrev : null;
+  const mtdDeltaHtml = mtdDelta !== null ? deltaHtml(mtdDelta) : '';
+  const pace    = kpis.paceVentas || 0;
+  const pacePct = meta > 0 ? pace / meta : 0;
+  const diaC    = kpis.diaCorte || 0;
+  const diasM   = kpis.diasDelMes || 30;
+
+  // Etiqueta de mes actual (ej. "abr 2026 D7")
+  const mesActLabel = (() => {
+    if (!kpis.mesActualKey) return 'Mes actual';
+    const [y,m] = kpis.mesActualKey.split('-');
+    return new Date(+y, +m-1, 1).toLocaleString('es-SV',{month:'short',year:'numeric'}) + ` D${diaC}`;
+  })();
+  const mesPrevLabel = (() => {
+    if (!kpis.mesPrevKey) return 'Mes ant.';
+    const [y,m] = kpis.mesPrevKey.split('-');
+    return new Date(+y, +m-1, 1).toLocaleString('es-SV',{month:'short',year:'numeric'}) + ` D${diaC}`;
+  })();
+
+  // Bloque MTD destacado
+  const mtdBlock = `
+    <div class="kpi-card" style="grid-column:span 2;background:linear-gradient(135deg,rgba(99,102,241,0.06),rgba(13,148,136,0.04));border-color:var(--indigo2)">
+      <div class="kc-label" style="color:var(--indigo);font-weight:600">📊 Ventas MTD — ${mesActLabel}</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:10px">
+        <div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:2px">Ventas a la fecha</div>
+          <div style="font-size:22px;font-weight:700;color:var(--text1)">${fmtN(mtd)}</div>
+          <div style="font-size:11px;color:var(--text3)">vs ${fmtN(mtdPrev)} (${mesPrevLabel}) ${mtdDeltaHtml}</div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:2px">Pace proyectado</div>
+          <div style="font-size:22px;font-weight:700;color:${pacePct>=1?'var(--teal)':pacePct>=0.7?'var(--amber)':'var(--red)'}">${fmtN(pace)}</div>
+          <div style="font-size:11px;color:var(--text3)">al cierre · día ${diaC}/${diasM} · meta ${fmtN(meta)}</div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:2px">ASPU MTD</div>
+          <div style="font-size:22px;font-weight:700;color:var(--text1)">${fmt(kpis.aspuMTD||0)}</div>
+          <div style="font-size:11px;color:var(--text3)">precio prom. por venta</div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:2px">ARPU residencial</div>
+          <div style="font-size:22px;font-weight:700;color:var(--text1)">${fmt(kpis.arpuResid||0)}</div>
+          <div style="font-size:11px;color:var(--text3)">ticket recurrente mensual</div>
+        </div>
+      </div>
+      <div style="margin-top:10px;background:var(--bg3);border-radius:4px;height:6px;overflow:hidden">
+        <div style="height:100%;width:${Math.min(100,pacePct*100).toFixed(1)}%;background:${pacePct>=1?'var(--teal)':pacePct>=0.7?'var(--amber)':'var(--indigo)'};border-radius:4px;transition:width .4s"></div>
+      </div>
+      <div style="font-size:10px;color:var(--text3);margin-top:4px">${(pacePct*100).toFixed(0)}% del pace hacia meta — datos al ${kpis.fechaCorteStr||''}</div>
+    </div>`;
+
   const html = [
+    mtdBlock,
     kpiCardHist('Instalaciones ' + (kpis.ultiMesInst||''), fmtN(inst),
       `Meta: ${fmtN(meta)} · ${pctMeta >= 1 ? '✓ cumplido' : fmtP(pctMeta)+' avance'}`,
       kpis.serieInst||[], pctMeta >= 1 ? 'accent-teal' : pctMeta >= .7 ? 'accent-amber' : 'accent-red', yoyInst),
@@ -2531,12 +2835,10 @@ function renderKPIsVentasResumen(kpis) {
     kpiCardHist('MRR recurrente', fmt(kpis.mrrUltimoMes),
       (kpis.ultimoMes||'') + ' · residencial',
       kpis.serieMRR||[], '', yoyMRR),
-    kpiCard('ARPU residencial', fmt(kpis.arpuResid), 'ticket promedio recurrente',
-      deltaHtml((kpis.arpuResid - (kpis.mrrMesAnt > 0 ? kpis.mrrMesAnt / Math.max(1, kpis.activosResid) : kpis.arpuResid)) / kpis.arpuResid)),
     kpiCard('Activos Odoo', fmtN(kpis.totalActivos), 'estado En proceso',
       deltaHtml((kpis.wishupActivos - kpis.totalActivos) / (kpis.totalActivos||1))),
     kpiCard('Activos Wishup', fmtN(kpis.wishupActivos), 'estado Activo · delta vs Odoo: '+(kpis.wishupActivos-kpis.totalActivos>=0?'+':'')+fmtN(kpis.wishupActivos-kpis.totalActivos), ''),
-    kpiCard('Reservas pipeline', fmtN(kpis.totalReservasPuras||0), '9,820 clientes · '+fmt(kpis.montoReservasPuras||0)+' cobrado',''),
+    kpiCard('Reservas pipeline', fmtN(kpis.totalReservasPuras||0), 'clientes · '+fmt(kpis.montoReservasPuras||0)+' cobrado',''),
     kpiCard('Meta ventas', fmtN(PARAMS.metaVentas), 'conexiones/mes configurado',''),
   ].join('');
   document.getElementById('kpi-ventas-resumen').innerHTML = html;
@@ -4313,6 +4615,320 @@ function tasasTramoLabel() {
 }
 
 /* ═══════════════════════════════════════════════════
+   PENETRACIÓN DE MERCADO
+═══════════════════════════════════════════════════ */
+function renderPenetracion() {
+  const kpis = window.DS.kpis;
+  if (!kpis) return;
+
+  // ── KPI cards top ──
+  const rows = kpis.penetracionRows || [];
+  const sinDatos = rows.length === 0;
+
+  if (sinDatos) {
+    document.getElementById('kpi-penet-top').innerHTML =
+      `<div class="kpi-card" style="grid-column:span 4;text-align:center;padding:32px">
+        <div style="font-size:28px;margin-bottom:8px">📂</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:6px">Archivo de Penetración no cargado</div>
+        <div style="font-size:12px;color:var(--text3)">Sube <strong>Penetracion_Proyectos.xlsx</strong> a Drive para ver el análisis completo.<br>
+        Mientras tanto se muestran las alarmas de conciliación Odoo-Wishup.</div>
+      </div>`;
+  } else {
+    document.getElementById('kpi-penet-top').innerHTML = [
+      kpiCard('Total Unidades', fmtN(kpis.penet_totalCasas||0), `${(kpis.penetracionRows||[]).length} proyectos`, ''),
+      kpiCard('Con DigiLife', fmtN(kpis.penet_digilife||0),
+        `${(kpis.penet_pctTotal||0).toFixed(1)}% penetración total`, '', 'accent-teal'),
+      kpiCard('Penetración sobre habitadas', fmtP(kpis.penet_pctHabitadas/100||0),
+        `${fmtN(kpis.penet_habitadas||0)} unidades habitadas`, '',
+        (kpis.penet_pctHabitadas||0) >= 40 ? 'accent-teal' : (kpis.penet_pctHabitadas||0) >= 20 ? 'accent-amber' : 'accent-red'),
+      kpiCard('Market Share', fmtP(kpis.penet_mktShare/100||0),
+        `${fmtN(kpis.penet_digilife||0)} DL vs ${fmtN(kpis.penet_competencia||0)} comp.`, ''),
+      kpiCard('Con competencia', fmtN(kpis.penet_competencia||0), 'usuarios en competidores', '', 'accent-amber'),
+      kpiCard('Suspendidos', fmtN(kpis.penet_suspendidos||0),
+        `MRR en riesgo: ${fmt(kpis.penet_mrrRiesgo||0)}`, '', 'accent-red'),
+    ].join('');
+  }
+
+  // ── Alarmas comerciales (Odoo vs Wishup + renovaciones) ──
+  const fc = kpis.fechaCorte || new Date();
+  const alarmas = [];
+
+  // Alarma 1: Residencial Odoo vs Wishup
+  const deltaResid = (kpis.wishupActivos||0) - (kpis.activosResid||0);
+  const absResid = Math.abs(deltaResid);
+  alarmas.push({
+    seg: 'Residencial',
+    icon: absResid <= 10 ? '🟢' : absResid <= 50 ? '🟡' : '🔴',
+    cls: absResid <= 10 ? 'alarm-ok' : absResid <= 50 ? 'alarm-warn' : 'alarm-crit',
+    odoo: kpis.activosResid||0, wh: kpis.wishupActivos||0,
+    delta: deltaResid, susp: kpis.wishupSuspendidos||0,
+    label: 'Activos',
+  });
+
+  // Alarma 2: PYME (suscripciones Odoo vs Wishup — por matcheo nombre)
+  const pymeDelta = (kpis.activosPyme||0);
+  alarmas.push({
+    seg: 'PYME',
+    icon: pymeDelta === 0 ? '🟢' : pymeDelta <= 5 ? '🟡' : '🔴',
+    cls: pymeDelta === 0 ? 'alarm-ok' : pymeDelta <= 5 ? 'alarm-warn' : 'alarm-crit',
+    odoo: kpis.activosPyme||0, wh: '—',
+    delta: null, susp: 0,
+    label: 'Activos Odoo',
+    extraSub: `Mora activa: ${fmt(kpis.moraPymeMonto||0)}`,
+  });
+
+  // Alarma 3: Corporativo
+  const corpDelta = (kpis.activosCorp||0);
+  alarmas.push({
+    seg: 'Corporativo',
+    icon: kpis.moraCorpMonto > 5000 ? '🔴' : kpis.moraCorpMonto > 1000 ? '🟡' : '🟢',
+    cls: kpis.moraCorpMonto > 5000 ? 'alarm-crit' : kpis.moraCorpMonto > 1000 ? 'alarm-warn' : 'alarm-ok',
+    odoo: kpis.activosCorp||0, wh: '—',
+    delta: null, susp: 0,
+    label: 'Activos Odoo',
+    extraSub: `Mora activa: ${fmt(kpis.moraCorpMonto||0)}`,
+  });
+
+  // Alarma 4: Clientes VENCIDOS (próxima factura < hoy)
+  const vencidos = (kpis.suspendidosCache||[]).filter(r => {
+    const d = toDate(r['Fecha de la próxima factura']);
+    return d && d < fc;
+  });
+  const mrrVencido = vencidos.reduce((s,r) => s + toNum(r['Total recurrente']), 0);
+  alarmas.push({
+    seg: 'Vencidos',
+    icon: vencidos.length === 0 ? '🟢' : vencidos.length <= 20 ? '🟡' : '🔴',
+    cls: vencidos.length === 0 ? 'alarm-ok' : vencidos.length <= 20 ? 'alarm-warn' : 'alarm-crit',
+    odoo: vencidos.length, wh: '—',
+    delta: null, susp: 0,
+    label: 'Clientes suspendidos vencidos',
+    extraSub: `MRR en riesgo: ${fmt(mrrVencido)}`,
+    clientes: vencidos,
+  });
+
+  // Alarma 5: Por vencerse próximos 30 días
+  const porVencer = (kpis.suspendidosCache||[]).filter(r => {
+    const d = toDate(r['Fecha de la próxima factura']);
+    if (!d) return false;
+    const dias = (d - fc) / (1000*60*60*24);
+    return dias >= 0 && dias <= 30;
+  });
+  const mrrPorVencer = porVencer.reduce((s,r) => s + toNum(r['Total recurrente']), 0);
+  alarmas.push({
+    seg: 'Por vencerse',
+    icon: porVencer.length === 0 ? '🟢' : porVencer.length <= 10 ? '🟡' : '🔴',
+    cls: porVencer.length === 0 ? 'alarm-ok' : porVencer.length <= 10 ? 'alarm-warn' : 'alarm-crit',
+    odoo: porVencer.length, wh: '—',
+    delta: null, susp: 0,
+    label: 'Vencen en próximos 30 días',
+    extraSub: `MRR en riesgo: ${fmt(mrrPorVencer)}`,
+    clientes: porVencer,
+  });
+
+  document.getElementById('penet-alarmas-meta').textContent =
+    `Datos al ${kpis.fechaCorteStr||''}`;
+
+  document.getElementById('penet-alarmas-container').innerHTML = alarmas.map(a => `
+    <div class="alarm-card ${a.cls}" style="cursor:${a.clientes&&a.clientes.length?'pointer':'default'}"
+      onclick="${a.clientes&&a.clientes.length ? `abrirDrillClientes('${a.seg}',${JSON.stringify(a.clientes.map(c=>({n:(c['Nombre del Cliente']||c['Cliente']||'').slice(0,40),p:c['Proyectos']||'',mrr:toNum(c['Total recurrente']),fc:c['Fecha de la próxima factura']||''})))})` : ''}">
+      <div class="alarm-semaforo">${a.icon}</div>
+      <div class="alarm-body">
+        <div class="alarm-title">${a.seg}</div>
+        <div class="alarm-sub">${a.label}${a.clientes&&a.clientes.length?' · clic para ver clientes':''}</div>
+        ${a.extraSub ? `<div class="alarm-sub">${a.extraSub}</div>` : ''}
+      </div>
+      <div class="alarm-val">${fmtN(a.odoo)}${a.delta!==null?` <span style="font-size:11px;color:var(--text3)">/ WH: ${fmtN(a.wh)} (${a.delta>=0?'+':''}${fmtN(a.delta)})</span>`:''}</div>
+    </div>`).join('');
+
+  // ── Barras de penetración ──
+  window._penetRows = rows;
+  renderPenetBarras();
+
+  if (rows.length === 0) return; // sin datos de archivo, no graficar
+
+  // ── Scatter DigiLife vs Competencia ──
+  const scatterData = rows.map(r => ({
+    x: r.digilife,
+    y: r.competencia,
+    r: Math.max(4, Math.sqrt(r.totalCasas / 10)),
+    label: r.proyecto,
+    totalCasas: r.totalCasas,
+  }));
+
+  mkChart('chart-penet-scatter', 'bubble', {
+    datasets: [{
+      label: 'Proyectos',
+      data: scatterData,
+      backgroundColor: scatterData.map(d =>
+        d.x > d.y ? 'rgba(13,148,136,0.65)' : 'rgba(220,38,38,0.55)'
+      ),
+      borderColor: scatterData.map(d =>
+        d.x > d.y ? 'rgba(13,148,136,0.9)' : 'rgba(220,38,38,0.8)'
+      ),
+      borderWidth: 1,
+    }]
+  }, {
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: ctx => {
+            const d = ctx.raw;
+            return [`${d.label}`, `DigiLife: ${fmtN(d.x)}`, `Competencia: ${fmtN(d.y)}`, `Total casas: ${fmtN(d.totalCasas)}`];
+          }
+        }
+      }
+    },
+    scales: {
+      x: { title: { display: true, text: 'DigiLife', color: '#64748b', font: { size: 10 } }, ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: '#e2e8f0' } },
+      y: { title: { display: true, text: 'Competencia', color: '#64748b', font: { size: 10 } }, ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: '#e2e8f0' } },
+    }
+  });
+
+  // ── Donut distribución total ──
+  const totD = kpis.penet_digilife || 0;
+  const totC = kpis.penet_competencia || 0;
+  const totS = kpis.penet_suspendidos || 0;
+  const totDesH = kpis.penet_totalCasas - kpis.penet_habitadas;
+  mkChart('chart-penet-donut', 'doughnut', {
+    labels: ['DigiLife', 'Competencia', 'Suspendidos', 'Deshabitadas/Alquiler'],
+    datasets: [{
+      data: [totD, totC, totS, Math.max(0, totDesH)],
+      backgroundColor: ['rgba(13,148,136,0.75)', 'rgba(220,38,38,0.65)', 'rgba(245,158,11,0.65)', 'rgba(148,163,184,0.5)'],
+      borderWidth: 0,
+    }]
+  }, {
+    cutout: '58%',
+    plugins: { legend: { position: 'right', labels: { color: '#64748b', boxWidth: 10, font: { size: 10 }, padding: 8 } } }
+  });
+
+  // ── Tabla ──
+  document.getElementById('penet-table-meta').textContent =
+    `${rows.length} proyectos · ${fmtN(kpis.penet_totalCasas||0)} casas totales`;
+
+  document.getElementById('tbody-penet').innerHTML = [...rows]
+    .sort((a,b) => b.pctPenetr - a.pctPenetr)
+    .map(r => {
+      const pct = r.pctPenetr > 0 ? r.pctPenetr : (r.habitadas > 0 ? r.digilife / r.habitadas * 100 : 0);
+      const mktShare = (r.digilife + r.competencia) > 0 ? r.digilife / (r.digilife + r.competencia) * 100 : 0;
+      const nivel = pct >= 40 ? '<span class="badge badge-teal">Alta</span>'
+                  : pct >= 20 ? '<span class="badge badge-blue">Media</span>'
+                  : pct >= 10 ? '<span class="badge badge-amber">Baja</span>'
+                  : '<span class="badge badge-red">Crítica</span>';
+      const tipoBadge = r.tipo.toLowerCase().includes('cerr') ? '<span class="badge badge-gray">Cerrado</span>' : '<span class="badge badge-teal">Abierto</span>';
+      return `<tr>
+        <td class="td-main">${r.proyecto}</td>
+        <td>${tipoBadge}</td>
+        <td class="td-num">${fmtN(r.totalCasas)}</td>
+        <td class="td-num">${fmtN(r.habitadas)}</td>
+        <td class="td-num td-pos">${fmtN(r.digilife)}</td>
+        <td class="td-num td-neg">${fmtN(r.competencia)}</td>
+        <td class="td-num td-warn">${fmtN(r.suspendidos)}</td>
+        <td class="td-num">${fmtN(r.deshabitadas)}</td>
+        <td class="td-num"><strong>${pct.toFixed(1)}%</strong></td>
+        <td class="td-num">${mktShare.toFixed(1)}%</td>
+        <td>${nivel}</td>
+      </tr>`;
+    }).join('');
+}
+
+// Render barras de penetración con filtros
+function renderPenetBarras() {
+  const rows = window._penetRows || [];
+  const filtro = document.getElementById('penet-filtro')?.value || 'todos';
+  const orden  = document.getElementById('penet-orden')?.value  || 'pct';
+
+  let filtered = [...rows];
+  if (filtro === 'abiertos') filtered = filtered.filter(r => !r.tipo.toLowerCase().includes('cerr'));
+  else if (filtro === 'alta') filtered = filtered.filter(r => r.pctPenetr >= 40);
+  else if (filtro === 'baja') filtered = filtered.filter(r => r.pctPenetr < 20 && r.pctPenetr > 0);
+
+  if (orden === 'pct')      filtered.sort((a,b) => b.pctPenetr - a.pctPenetr);
+  else if (orden === 'casas')    filtered.sort((a,b) => b.totalCasas - a.totalCasas);
+  else if (orden === 'digilife') filtered.sort((a,b) => b.digilife - a.digilife);
+
+  const grid = document.getElementById('penet-barras-grid');
+  if (!grid) return;
+
+  if (filtered.length === 0) {
+    grid.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:20px">Sin proyectos con este filtro.</div>';
+    return;
+  }
+
+  grid.innerHTML = filtered.map(r => {
+    const pct = r.pctPenetr > 0 ? r.pctPenetr : (r.habitadas > 0 ? r.digilife / r.habitadas * 100 : 0);
+    const pctTotal = r.totalCasas > 0 ? r.digilife / r.totalCasas * 100 : 0;
+    const color = pct >= 40 ? '#16a34a' : pct >= 20 ? '#6366f1' : pct >= 10 ? '#d97706' : '#dc2626';
+    const statusCls = pct >= 40 ? 'penet-status-alta' : pct >= 20 ? 'penet-status-media' : pct >= 10 ? 'penet-status-baja' : 'penet-status-critica';
+    const mktShare = (r.digilife + r.competencia) > 0 ? (r.digilife / (r.digilife + r.competencia) * 100).toFixed(0) : 0;
+    return `
+      <div class="penet-bar-card ${statusCls}" style="cursor:pointer" onclick="drillPenetracion(${JSON.stringify(r).replace(/"/g,'&quot;')})">
+        <div class="penet-bar-header">
+          <span class="penet-bar-name">${r.proyecto}</span>
+          <span class="penet-bar-pct" style="color:${color}">${pct.toFixed(1)}%</span>
+        </div>
+        <div class="penet-track">
+          <div class="penet-fill-digilife" style="width:${Math.min(100,pctTotal).toFixed(1)}%;background:${color}"></div>
+        </div>
+        <div class="penet-meta">
+          <span><span class="penet-dot" style="background:#16a34a"></span>${fmtN(r.digilife)} DL</span>
+          <span><span class="penet-dot" style="background:#dc2626"></span>${fmtN(r.competencia)} comp.</span>
+          <span><span class="penet-dot" style="background:#94a3b8"></span>${fmtN(r.totalCasas)} total</span>
+          <span>Mkt: ${mktShare}%</span>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// Drilldown de un proyecto de penetración
+function drillPenetracion(r) {
+  const pct = r.pctPenetr > 0 ? r.pctPenetr : (r.habitadas > 0 ? r.digilife / r.habitadas * 100 : 0);
+  const mktShare = (r.digilife + r.competencia) > 0 ? (r.digilife / (r.digilife + r.competencia) * 100).toFixed(1) : 0;
+  const kpis = window.DS?.kpis || {};
+  const arpu = (kpis.arpuPorProy||{})[r.proyecto] || kpis.arpuResid || 27.63;
+  const mrrProyecto = r.digilife * arpu;
+  const mrrRiesgo   = r.suspendidos * arpu;
+
+  openModal(`${r.proyecto} — Penetración`, `
+    <div class="kpi-grid" style="margin-bottom:16px">
+      ${kpiCard('Total casas', fmtN(r.totalCasas), r.tipo, '')}
+      ${kpiCard('Habitadas', fmtN(r.habitadas), (r.habitadas/r.totalCasas*100).toFixed(0)+'% ocupación', '')}
+      ${kpiCard('Con DigiLife', fmtN(r.digilife), pct.toFixed(1)+'% penetración', '', 'accent-teal')}
+      ${kpiCard('Competencia', fmtN(r.competencia), 'Market share DL: '+mktShare+'%', '', 'accent-amber')}
+      ${kpiCard('Suspendidos', fmtN(r.suspendidos), 'MRR en riesgo: '+fmt(mrrRiesgo), '', 'accent-red')}
+      ${kpiCard('MRR proyecto', fmt(mrrProyecto), 'ARPU: '+fmt(arpu), '')}
+    </div>
+    <div style="background:var(--bg3);border-radius:6px;padding:12px;font-size:12px;color:var(--text2)">
+      <strong>Oportunidad:</strong> ${fmtN(r.habitadas - r.digilife)} casas habitadas sin DigiLife ·
+      Potencial MRR adicional: <strong>${fmt((r.habitadas - r.digilife) * arpu)}</strong><br>
+      Deshabitadas: ${fmtN(r.deshabitadas)} · En alquiler: ${fmtN(r.enAlquiler)}
+    </div>`);
+}
+
+// Drilldown de clientes vencidos/por vencerse
+function abrirDrillClientes(segmento, clientes) {
+  if (!clientes || !clientes.length) return;
+  const rows = clientes.map(c => `<tr>
+    <td class="td-main">${c.n||'—'}</td>
+    <td>${c.p||'Sin proyecto'}</td>
+    <td class="td-num">${fmt(c.mrr||0)}</td>
+    <td class="td-num">${c.fc||'—'}</td>
+  </tr>`).join('');
+  openModal(`${segmento} — ${fmtN(clientes.length)} clientes`, `
+    <div class="table-wrap" style="max-height:400px;overflow-y:auto">
+      <table>
+        <thead style="position:sticky;top:0;background:var(--bg3)">
+          <tr><th>Cliente</th><th>Proyecto</th><th class="td-num">MRR</th><th class="td-num">Próx. Factura</th></tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div style="margin-top:10px;font-size:11px;color:var(--text3);padding:8px 0">
+      MRR total en riesgo: <strong>${fmt(clientes.reduce((s,c)=>s+(c.mrr||0),0))}</strong>
+    </div>`);
+}
+
+/* ═══════════════════════════════════════════════════
    LOCALSTORAGE — persistencia de KPIs entre recargas
 ═══════════════════════════════════════════════════ */
 function guardarCache(ds) {
@@ -4486,9 +5102,11 @@ function setProgress(msg, pct) {
 function mostrarDashboard() {
   document.getElementById('screen-upload').style.display = 'none';
   document.getElementById('mod-ventas').style.display = 'block';
+  // Reset lazy render flags para forzar re-render con datos nuevos
+  Object.keys(_lazyRendered).forEach(k => delete _lazyRendered[k]);
   renderVentas(); renderCobranza(); renderMora();
   renderRetencion(); renderSoporte(); renderReservas();
-  renderConciliacion(); renderHistorico();
+  // Conciliación, Histórico y Penetración se renderizan al abrir el tab (canvas invisible = 0px)
 }
 
 /* ═══════════════════════════════════════════════════
