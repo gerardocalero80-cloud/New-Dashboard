@@ -5080,8 +5080,23 @@ async function cargarDesdeDrive() {
   const btn = document.getElementById('btn-drive-load');
   btn.disabled = true; btn.textContent = 'Cargando...';
   document.getElementById('progress-bar').style.display = 'flex';
+
+  // ── Temporizador visible ──
+  const _t0 = Date.now();
+  const _timerInterval = setInterval(() => {
+    const seg = Math.floor((Date.now() - _t0) / 1000);
+    const el = document.getElementById('progress-label');
+    if (el && el.dataset.base) el.textContent = el.dataset.base + ' (' + seg + 's)';
+  }, 1000);
+  const _origSetProgress = setProgress;
+  const setProgressT = (msg, pct) => {
+    _origSetProgress(msg, pct);
+    const el = document.getElementById('progress-label');
+    if (el) el.dataset.base = msg;
+  };
+
   try {
-    setProgress('Conectando con Google Drive...', 10);
+    setProgressT('Conectando con Google Drive...', 10);
     const info = await jsonpFetch(APPS_SCRIPT_URL + '?action=info');
     if (info.error) throw new Error(info.error);
 
@@ -5091,11 +5106,11 @@ async function cargarDesdeDrive() {
         : `<div class="file-item"><span class="fi-name">${k}</span><span class="fi-status fi-err">✗</span></div>`
     ).join('');
 
-    setProgress('Descargando datos...', 35);
+    setProgressT('Descargando datos...', 35);
     const data = await jsonpFetch(APPS_SCRIPT_URL + '?action=data');
     if (data.error) throw new Error(data.error);
 
-    setProgress('Procesando...', 70);
+    setProgressT('Procesando...', 70);
     window.DS.asiento      = data.asiento      || [];
     window.DS.pedidos       = data.pedidos       || [];
     window.DS.suscripciones = data.suscripciones || [];
@@ -5119,15 +5134,17 @@ async function cargarDesdeDrive() {
     await new Promise(r => setTimeout(r, 30));
     calcKPIs();
 
-    setProgress('Guardando caché local...', 90);
+    setProgressT('Guardando caché local...', 90);
     guardarCache(window.DS);
     window.DS.loaded = true;
     updateStatus({ fuente:'drive', ts: data.ts });
     mostrarDashboard();
-    setProgress('Listo', 100);
+    clearInterval(_timerInterval);
+    setProgress('Listo ✓ (' + Math.floor((Date.now()-_t0)/1000) + 's)', 100);
     document.getElementById('progress-bar').style.display = 'none';
 
   } catch(err) {
+    clearInterval(_timerInterval);
     setProgress('Error: ' + err.message, 0);
     document.getElementById('drive-info').textContent = '✗ ' + err.message;
     document.getElementById('progress-bar').style.display = 'none';
