@@ -4623,6 +4623,18 @@ function tasasTramoLabel() {
 function renderPenetracion() {
   const kpis = window.DS.kpis;
   if (!kpis) return;
+  // toDate local — por si calcKPIs aún no expuso window.toDate
+  const toDate = window.toDate || (v => {
+    if (!v) return null;
+    if (v instanceof Date) return isNaN(v) ? null : v;
+    const s = String(v).trim();
+    if (!s) return null;
+    let d = new Date(s);
+    if (!isNaN(d)) return d;
+    const m1 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (m1) { d = new Date(`${m1[3]}-${m1[2].padStart(2,'0')}-${m1[1].padStart(2,'0')}`); return isNaN(d) ? null : d; }
+    return null;
+  });
 
   // ── KPI cards top ──
   const rows = kpis.penetracionRows || [];
