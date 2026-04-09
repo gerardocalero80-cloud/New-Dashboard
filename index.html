@@ -5083,6 +5083,7 @@ async function cargarDesdeDrive() {
     window.DS.clientes      = data.clientes      || [];
     window.DS.instalaciones = data.instalaciones || [];
     window.DS.tickets       = data.tickets       || [];
+    window.DS.penetracion   = data.penetracion   || [];  // 7º archivo — Penetracion_Proyectos
     window.DS._fuente       = 'drive';
 
     await new Promise(r => setTimeout(r, 30));
