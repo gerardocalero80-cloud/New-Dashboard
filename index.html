@@ -1111,6 +1111,7 @@ tbody td.td-warn { color: var(--amber); }
         <div class="table-wrap"><table id="tbl-res-criticas"><thead><tr><th>Referencia</th><th>Cliente</th><th>DUI</th><th>Proyecto</th><th class="td-num">Monto</th><th>Fecha reserva</th><th class="td-num">Meses</th></tr></thead><tbody></tbody></table></div>
       </div>
     </div>
+  </div><!-- /mod-reservas -->
   <!-- ══ HISTÓRICO ══ -->
   <div id="mod-historico" class="module" style="display:none">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
@@ -1741,7 +1742,9 @@ function calcKPIs() {
     if (m2) { d = new Date(`${m2[3]}-${m2[1].padStart(2,'0')}-${m2[2].padStart(2,'0')}`); return isNaN(d) ? null : d; }
     return null;
   };
+  window.toDate = toDate; // exponer globalmente para uso en render functions
   const mesKey = d => d ? `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` : null;
+  window.mesKey = mesKey;
 
   // Detectar fecha de corte real desde los datos (máxima fecha de factura)
   let fechaCorteReal = null;
