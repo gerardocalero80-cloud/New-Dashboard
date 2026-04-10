@@ -5107,8 +5107,13 @@ async function cargarDesdeDrive() {
         : `<div class="file-item"><span class="fi-name">${f ? f.pattern : '?'}</span><span class="fi-status fi-err">✗ No encontrado</span></div>`
     ).join('');
 
-    setProgressT('Descargando datos...', 35);
-    const data = await jsonpFetch(APPS_SCRIPT_URL + '?action=data');
+    setProgressT('Descargando datos (6 archivos + Penetración en paralelo)...', 35);
+
+    // Llamadas en paralelo: datos principales + penetración por separado
+    const [data, dataPenetr] = await Promise.all([
+      jsonpFetch(APPS_SCRIPT_URL + '?action=data',        300000),  // 5 min — 6 archivos grandes
+      jsonpFetch(APPS_SCRIPT_URL + '?action=penetracion', 120000),  // 2 min — solo penetración
+    ]);
     if (data.error) throw new Error(data.error);
 
     setProgressT('Procesando...', 70);
@@ -5118,10 +5123,12 @@ async function cargarDesdeDrive() {
     window.DS.clientes      = data.clientes      || [];
     window.DS.instalaciones = data.instalaciones || [];
     window.DS.tickets       = data.tickets       || [];
-    window.DS.penetracion   = data.penetracion   || [];  // 7º archivo — Penetracion_Proyectos
+    // Penetración: primero intenta la respuesta dedicada, luego la del batch
+    window.DS.penetracion   = (dataPenetr && !dataPenetr.error && dataPenetr.penetracion && dataPenetr.penetracion.length)
+                              ? dataPenetr.penetracion
+                              : (data.penetracion || []);
     window.DS._fuente       = 'drive';
 
-    // Debug: confirmar filas recibidas por dataset
     console.log('[DigiLife] Drive data recibida:', {
       asiento: window.DS.asiento.length,
       pedidos: window.DS.pedidos.length,
