@@ -5101,9 +5101,10 @@ async function cargarDesdeDrive() {
     if (info.error) throw new Error(info.error);
 
     const fl = document.getElementById('drive-file-list');
-    fl.innerHTML = Object.entries(info.files||{}).map(([k,f]) =>
-      f ? `<div class="file-item"><span class="fi-name" style="font-size:11px">${f.name}</span><span class="fi-type">${new Date(f.updated).toLocaleDateString('es-SV')}</span><span class="fi-status fi-ok">✓</span></div>`
-        : `<div class="file-item"><span class="fi-name">${k}</span><span class="fi-status fi-err">✗</span></div>`
+    fl.innerHTML = (info.files||[]).map(f =>
+      f && f.found
+        ? `<div class="file-item"><span class="fi-name" style="font-size:11px">${f.name}</span><span class="fi-type">${f.date ? new Date(f.date).toLocaleDateString('es-SV') : '—'}</span><span class="fi-status fi-ok">✓</span></div>`
+        : `<div class="file-item"><span class="fi-name">${f ? f.pattern : '?'}</span><span class="fi-status fi-err">✗ No encontrado</span></div>`
     ).join('');
 
     setProgressT('Descargando datos...', 35);
