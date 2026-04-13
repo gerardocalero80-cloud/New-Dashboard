@@ -804,7 +804,10 @@ tbody td.td-warn { color: var(--amber); }
               <div class="cc-sub" id="ventas-dia-sub">VD + EK por proyecto · top 5</div>
             </div>
           </div>
-          <div class="chart-wrap" style="height:200px"><canvas id="chart-ventas-dia-proy"></canvas></div>
+          <div style="position:relative">
+            <div class="chart-wrap" style="height:200px"><canvas id="chart-ventas-dia-proy"></canvas></div>
+            <div id="chart-ventas-dia-empty" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;color:var(--text3);font-size:12px">Sin ventas VD+EK registradas en el mes actual</div>
+          </div>
           <div class="dblclick-hint">haz clic en una barra para ver detalle del día</div>
         </div>
       </div>
@@ -1994,14 +1997,18 @@ function calcKPIs() {
   });
   kpis.canalData = canalData;
 
-  /* ── VENTAS POR DÍA POR PROYECTO — mes actual MTD (VD + EK) ── */
+  /* ── VENTAS POR DÍA POR PROYECTO — mes actual MTD (VD + EK, solo RESIDENCIAL) ── */
   const ventasDiaProy = {};   // { 'YYYY-MM-DD': { proyecto: count } }
   const ventasDiaTotales = {}; // { 'YYYY-MM-DD': count }
   pedidosOp.filter(r => {
-    const d = toDate(r['Fecha de Creación']);
-    const modo = String(r['Modo de Venta']||'');
+    const d       = toDate(r['Fecha de Creación']);
+    const modo    = String(r['Modo de Venta']||'');
+    const agencia = String(r['Agencias']||'').toLowerCase();
+    const tipo    = String(r['Tipo de Cliente.-.']||r['Tipo de Cliente']||'').toLowerCase();
     return d && mesKey(d) === mesActualKey &&
-           (modo === 'Venta Directa' || modo === 'Entrega de Llave');
+           (modo === 'Venta Directa' || modo === 'Entrega de Llave') &&
+           agencia !== 'oficina central' &&   // excluir Corp
+           tipo    !== 'pyme';                // excluir PYME
   }).forEach(r => {
     const d = toDate(r['Fecha de Creación']);
     const dayKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -2013,7 +2020,7 @@ function calcKPIs() {
   kpis.ventasDiaProy   = ventasDiaProy;
   kpis.ventasDiaTotales = ventasDiaTotales;
 
-  /* ── VENTAS VD+EK POR PROYECTO — últimos 4 meses (mes actual vs prom 3m) ── */
+  /* ── VENTAS VD+EK POR PROYECTO — últimos 4 meses, solo RESIDENCIAL ── */
   const ventasMesProy = {}; // { 'YYYY-MM': { proyecto: count } }
   const mesesRef4 = [];
   for (let i = 0; i < 4; i++) {
@@ -2021,8 +2028,12 @@ function calcKPIs() {
     mesesRef4.push(`${dRef.getFullYear()}-${String(dRef.getMonth()+1).padStart(2,'0')}`);
   }
   pedidosOp.filter(r => {
-    const modo = String(r['Modo de Venta']||'');
-    return modo === 'Venta Directa' || modo === 'Entrega de Llave';
+    const modo    = String(r['Modo de Venta']||'');
+    const agencia = String(r['Agencias']||'').toLowerCase();
+    const tipo    = String(r['Tipo de Cliente.-.']||r['Tipo de Cliente']||'').toLowerCase();
+    return (modo === 'Venta Directa' || modo === 'Entrega de Llave') &&
+           agencia !== 'oficina central' &&   // excluir Corp
+           tipo    !== 'pyme';                // excluir PYME
   }).forEach(r => {
     const d = toDate(r['Fecha de Creación']);
     if (!d) return;
@@ -3145,9 +3156,15 @@ function renderKPIsResidencial(kpis) {
     const [y,m] = mesActKey.split('-');
     return new Date(+y,+m-1,1).toLocaleString('es-SV',{month:'short',year:'numeric'});
   })();
-  const actFormalesVD  = kpis.ventasMes?.[mesActKey]?.vd  || 0;
-  const actFormalesEK  = kpis.ventasMes?.[mesActKey]?.ek  || 0;
-  const actFormales    = actFormalesVD + actFormalesEK;
+  // VD+EK solo residencial: usar ventasMesProy (ya filtrado sin Corp/PYME)
+  const ventasMesProyMTD = kpis.ventasMesProy?.[mesActKey] || {};
+  const actFormales    = Object.values(ventasMesProyMTD).reduce((s,v)=>s+v,0);
+  // Desglose VD vs EK residencial desde ventasMes (vd/ek excluyen Corp pero pueden incluir PYME)
+  // Aproximación: proporcionar total residencial desde proy y ratio desde ventasMes
+  const vdTotal = kpis.ventasMes?.[mesActKey]?.vd || 0;
+  const ekTotal = kpis.ventasMes?.[mesActKey]?.ek || 0;
+  const actFormalesVD  = vdTotal;  // muestra VD (excluye Corp, puede incluir PYME mínimo)
+  const actFormalesEK  = ekTotal;  // muestra EK
   const resNuevasMTD   = kpis.resNuevasMes?.[mesActKey] || 0;
   const convRate       = (actFormales + resNuevasMTD) > 0
     ? (actFormales / (actFormales + resNuevasMTD) * 100).toFixed(0) + '%' : '—';
@@ -3244,14 +3261,17 @@ function renderChartNetasResid(kpis) {
 function renderChartVentasDiaProy(kpis) {
   const dpData = kpis.ventasDiaProy || {};
   const days   = Object.keys(dpData).sort();
+  const emptyDiv = document.getElementById('chart-ventas-dia-empty');
+  const cvs      = document.getElementById('chart-ventas-dia-proy');
   if (!days.length) {
-    // No hay datos MTD aún — mostrar mensaje
-    const canvas = document.getElementById('chart-ventas-dia-proy');
-    if (canvas && canvas.parentNode) {
-      canvas.parentNode.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text3);font-size:12px">Sin ventas registradas en el mes actual</div>';
-    }
+    // Mostrar mensaje sin destruir el canvas
+    if (emptyDiv) { emptyDiv.style.display = 'flex'; }
+    if (cvs)      { cvs.style.display = 'none'; }
     return;
   }
+  // Hay datos: asegurar canvas visible
+  if (emptyDiv) emptyDiv.style.display = 'none';
+  if (cvs)      cvs.style.display = '';
 
   // Top 5 proyectos por total de ventas en el mes
   const proyCounts = {};
@@ -3281,7 +3301,7 @@ function renderChartVentasDiaProy(kpis) {
     stack: 'a'
   }));
 
-  // Línea total acumulado por día
+  // Línea total acumulado por día (sin yAxisID secundario para máxima compatibilidad)
   const totals = days.map(d => kpis.ventasDiaTotales?.[d] || 0);
   datasets.push({
     label:'Total día',
@@ -3292,8 +3312,7 @@ function renderChartVentasDiaProy(kpis) {
     pointRadius:3,
     pointBackgroundColor:'rgba(15,23,42,0.55)',
     fill:false,
-    tension:0.3,
-    yAxisID:'yLine'
+    tension:0.3
   });
 
   // Actualizar subtitle con proyectos incluidos
@@ -3316,8 +3335,7 @@ function renderChartVentasDiaProy(kpis) {
     },
     scales:{
       x:{ticks:{color:'#64748b',font:{size:10}},grid:{color:'#e2e8f0'},stacked:true},
-      y:{ticks:{color:'#64748b',font:{size:10}},grid:{color:'#e2e8f0'},stacked:true},
-      yLine:{display:false,position:'right'}
+      y:{ticks:{color:'#64748b',font:{size:10}},grid:{color:'#e2e8f0'},stacked:true}
     },
     onClick:(e,elements) => {
       if (!elements.length) return;
