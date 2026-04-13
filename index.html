@@ -5345,6 +5345,13 @@ function guardarCache(ds) {
       fuente: ds._fuente || 'manual',
       mb,
       fechaCorteStr: kpis.fechaCorteStr || '',
+      filas: {
+        asiento:       ds.asiento?.length       || 0,
+        suscripciones: ds.suscripciones?.length || 0,
+        clientes:      ds.clientes?.length      || 0,
+        pedidos:       ds.pedidos?.length       || 0,
+        penetracion:   ds.penetracion?.length   || 0,
+      }
     }));
     return true;
   } catch(e) {
@@ -5396,6 +5403,13 @@ function restaurarCache() {
     // Restaurar Sets vacíos para no romper funciones que los usen
     kpis.refsPyme = new Set();
     kpis.refsCorp = new Set();
+    // Retrocompatibilidad: nuevos campos que caché antiguo no tiene
+    kpis.ventasDiaProy   = kpis.ventasDiaProy   || {};
+    kpis.ventasDiaTotales= kpis.ventasDiaTotales || {};
+    kpis.ventasMesProy   = kpis.ventasMesProy    || {};
+    kpis.mesesRef4       = kpis.mesesRef4        || [];
+    kpis.resNuevasMes    = kpis.resNuevasMes     || {};
+    kpis.actFormalesMTD  = kpis.actFormalesMTD   || 0;
 
     window.DS.kpis   = kpis;
     window.DS.loaded = true;
@@ -5564,11 +5578,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const hace  = Math.floor((Date.now() - ts) / 60000);
     const haceStr = hace < 60 ? `hace ${hace} min` : `hace ${Math.floor(hace/60)}h`;
     const filas = Object.entries(cached.meta.filas||{}).map(([k,v])=>`${k}: ${v.toLocaleString()}`).join(' · ');
+    const fechaCorteStr = cached.meta.fechaCorteStr ? ` · corte: ${cached.meta.fechaCorteStr}` : '';
     document.getElementById('cache-info').textContent =
-      `${haceStr} · fuente: ${cached.meta.fuente||'manual'} · ${filas}`;
+      `${haceStr} · fuente: ${cached.meta.fuente||'manual'}${fechaCorteStr} · ${filas}`;
     document.getElementById('cache-panel').style.display = 'block';
-    // Auto-restaurar si los datos tienen menos de 8 horas
-    if (hace < 480) restaurarCache();
+    // Auto-restaurar si los datos tienen menos de 24 horas (TTL extendido de 8h→24h)
+    if (hace < 1440) {
+      restaurarCache();
+    } else {
+      // Caché vencido: avisar pero dejar el botón disponible
+      document.getElementById('cache-info').textContent +=
+        ' ⚠️ Datos de más de 24h — recomendado recargar desde Drive';
+    }
   }
 });
 </script>
