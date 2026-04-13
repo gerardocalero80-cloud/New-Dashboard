@@ -795,13 +795,41 @@ tbody td.td-warn { color: var(--amber); }
           <div class="chart-wrap" style="height:220px"><canvas id="chart-netas-resid"></canvas></div>
         </div>
       </div>
+      <!-- Ventas por día en mes actual por proyecto -->
+      <div class="chart-row cols-1">
+        <div class="chart-card">
+          <div class="cc-header">
+            <div>
+              <div class="cc-title">Ventas por día — mes actual</div>
+              <div class="cc-sub" id="ventas-dia-sub">VD + EK por proyecto · top 5</div>
+            </div>
+          </div>
+          <div class="chart-wrap" style="height:200px"><canvas id="chart-ventas-dia-proy"></canvas></div>
+          <div class="dblclick-hint">haz clic en una barra para ver detalle del día</div>
+        </div>
+      </div>
+      <!-- Tabla instalaciones por proyecto + comparativo prom 3 meses -->
       <div class="chart-row cols-1">
         <div class="chart-card">
           <div class="section-header">
-            <div class="section-title">Instalaciones por proyecto</div>
+            <div class="section-title">Ventas por proyecto — mes actual vs promedio 3 meses</div>
             <div class="section-meta" id="resid-mes-label"></div>
           </div>
-          <div class="table-wrap"><table id="tbl-inst-proyecto"><thead><tr><th>Proyecto</th><th class="td-num">Instalaciones</th><th class="td-num">% del total</th><th class="td-num">Acum. año</th></tr></thead><tbody></tbody></table></div>
+          <div class="table-wrap">
+            <table id="tbl-inst-proyecto">
+              <thead>
+                <tr>
+                  <th>Proyecto</th>
+                  <th class="td-num">Mes actual</th>
+                  <th class="td-num">% total</th>
+                  <th class="td-num">Prom. 3m</th>
+                  <th class="td-num">Δ vs prom</th>
+                  <th class="td-num">Acum. año</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
@@ -1915,12 +1943,16 @@ function calcKPIs() {
       ventasMes[k].montoCorp += monto;
     } else {
       if (modo === 'Venta Directa')    { ventasMes[k].vd++;      ventasMes[k].montoVD  += monto; }
-      else if (modo === 'Reserva')     { ventasMes[k].reserva++; ventasMes[k].montoRes += monto; }
+      else if (modo === 'Reserva' && monto === 10) { ventasMes[k].reserva++; ventasMes[k].montoRes += monto; } // Reserva formal: Total=$10
       else if (modo === 'Entrega de Llave') { ventasMes[k].ek++; ventasMes[k].montoEK  += monto; }
     }
     ventasMes[k].total++;
   });
   kpis.ventasMes = ventasMes;
+
+  /* ── VENTAS POR DÍA POR PROYECTO (mes actual MTD) ── */
+  // Se calcula después de que mesActualKey esté disponible; se re-llena abajo.
+  // Placeholder; se rellena en la sección MTD más abajo.
 
   /* ── MTD COMERCIAL: ventas mes actual vs mismo día mes anterior ── */
   const fcMTD    = kpis.fechaCorte || hoy;   // T-1
@@ -1961,6 +1993,57 @@ function calcKPIs() {
     if (canalData[canal] !== undefined) canalData[canal]++;
   });
   kpis.canalData = canalData;
+
+  /* ── VENTAS POR DÍA POR PROYECTO — mes actual MTD (VD + EK) ── */
+  const ventasDiaProy = {};   // { 'YYYY-MM-DD': { proyecto: count } }
+  const ventasDiaTotales = {}; // { 'YYYY-MM-DD': count }
+  pedidosOp.filter(r => {
+    const d = toDate(r['Fecha de Creación']);
+    const modo = String(r['Modo de Venta']||'');
+    return d && mesKey(d) === mesActualKey &&
+           (modo === 'Venta Directa' || modo === 'Entrega de Llave');
+  }).forEach(r => {
+    const d = toDate(r['Fecha de Creación']);
+    const dayKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const proy = String(r['Proyectos']||'Sin proyecto').trim() || 'Sin proyecto';
+    if (!ventasDiaProy[dayKey]) ventasDiaProy[dayKey] = {};
+    ventasDiaProy[dayKey][proy] = (ventasDiaProy[dayKey][proy]||0) + 1;
+    ventasDiaTotales[dayKey] = (ventasDiaTotales[dayKey]||0) + 1;
+  });
+  kpis.ventasDiaProy   = ventasDiaProy;
+  kpis.ventasDiaTotales = ventasDiaTotales;
+
+  /* ── VENTAS VD+EK POR PROYECTO — últimos 4 meses (mes actual vs prom 3m) ── */
+  const ventasMesProy = {}; // { 'YYYY-MM': { proyecto: count } }
+  const mesesRef4 = [];
+  for (let i = 0; i < 4; i++) {
+    const dRef = new Date(anioMTD, mesMTDnum - 1 - i, 1);
+    mesesRef4.push(`${dRef.getFullYear()}-${String(dRef.getMonth()+1).padStart(2,'0')}`);
+  }
+  pedidosOp.filter(r => {
+    const modo = String(r['Modo de Venta']||'');
+    return modo === 'Venta Directa' || modo === 'Entrega de Llave';
+  }).forEach(r => {
+    const d = toDate(r['Fecha de Creación']);
+    if (!d) return;
+    const k = mesKey(d);
+    if (!mesesRef4.includes(k)) return;
+    const proy = String(r['Proyectos']||'Sin proyecto').trim() || 'Sin proyecto';
+    if (!ventasMesProy[k]) ventasMesProy[k] = {};
+    ventasMesProy[k][proy] = (ventasMesProy[k][proy]||0) + 1;
+  });
+  kpis.ventasMesProy = ventasMesProy;
+  kpis.mesesRef4     = mesesRef4; // [mesActual, prev1, prev2, prev3]
+
+  // Activaciones MTD separadas: VD+EK formales vs Reservas nuevas (Total=$10)
+  kpis.actFormalesMTD = (ventasMesProy[mesActualKey]?.vd||0) +
+    pedidosOp.filter(r => {
+      const d = toDate(r['Fecha de Creación']);
+      const modo = String(r['Modo de Venta']||'');
+      return d && mesKey(d) === mesActualKey && (modo === 'Venta Directa' || modo === 'Entrega de Llave');
+    }).length;
+  // Corrección: actFormalesMTD = suma directa desde ventasMesProy
+  kpis.actFormalesMTD = Object.values(ventasMesProy[mesActualKey]||{}).reduce((s,v)=>s+v,0);
 
   /* ── INSTALACIONES WISHUP ── */
   const instMes = {};
@@ -2473,10 +2556,11 @@ function calcKPIs() {
     ).map(r => r['Cliente'])
   );
 
+  // Reservas formales: Modo='Reserva' + Total exacto $10 (depósito de reserva)
   const reservasPuras = ds.pedidos.filter(r =>
     String(r['Estado']||'') === 'Pedido de venta' &&
-    String(r['Modo de Venta']||'').toLowerCase().includes('reserva') &&
-    !pedidosConVD.has(r['Cliente'])
+    String(r['Modo de Venta']||'') === 'Reserva' &&
+    toNum(r['Total']) === 10
   );
 
   // Pipeline por antigüedad
@@ -2501,10 +2585,12 @@ function calcKPIs() {
   kpis.resPorProy = resPorProy;
 
   // Nuevas reservas por mes
+  // Nuevas reservas por mes — mismo filtro: Modo='Reserva' + Total=$10
   const resNuevasMes = {};
   ds.pedidos.filter(r =>
     String(r['Estado']||'') === 'Pedido de venta' &&
-    String(r['Modo de Venta']||'').toLowerCase().includes('reserva')
+    String(r['Modo de Venta']||'') === 'Reserva' &&
+    toNum(r['Total']) === 10
   ).forEach(r => {
     const d = toDate(r['Fecha de Creación']);
     if (!d) return;
@@ -2786,7 +2872,8 @@ function renderVentas() {
   renderKPIsResidencial(kpis);
   renderChartInstResid(kpis);
   renderChartNetasResid(kpis);
-  renderTablaInstProyecto(kpis);
+  renderChartVentasDiaProy(kpis);   // ← NUEVO: ventas por día por proyecto
+  renderTablaInstProyecto(kpis);    // ← actualizado con prom 3m
   renderKPIsPyme(kpis);
   renderChartVentasPymeMes(kpis);
   renderChartCarteraPyme(kpis);
@@ -3050,7 +3137,43 @@ function renderChartCanal(kpis) {
 
 function renderKPIsResidencial(kpis) {
   const bajasM = kpis.bajasUltimoMes || 0;
+
+  // Activaciones del mes separadas: VD+EK formales vs Reservas pipeline (Total=$10)
+  const mesActKey  = kpis.mesActualKey || '';
+  const mesActLabel2 = (() => {
+    if (!mesActKey) return 'MTD';
+    const [y,m] = mesActKey.split('-');
+    return new Date(+y,+m-1,1).toLocaleString('es-SV',{month:'short',year:'numeric'});
+  })();
+  const actFormalesVD  = kpis.ventasMes?.[mesActKey]?.vd  || 0;
+  const actFormalesEK  = kpis.ventasMes?.[mesActKey]?.ek  || 0;
+  const actFormales    = actFormalesVD + actFormalesEK;
+  const resNuevasMTD   = kpis.resNuevasMes?.[mesActKey] || 0;
+  const convRate       = (actFormales + resNuevasMTD) > 0
+    ? (actFormales / (actFormales + resNuevasMTD) * 100).toFixed(0) + '%' : '—';
+
   const html = [
+    // Bloque activaciones del mes — span 2 columnas
+    `<div class="kpi-card" style="grid-column:span 2;background:linear-gradient(135deg,rgba(20,184,166,0.06),rgba(99,102,241,0.04));border-color:rgba(20,184,166,0.35)">
+      <div class="kc-label" style="color:var(--teal);font-weight:600">📦 Activaciones ${mesActLabel2} — desglose</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:10px">
+        <div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:2px">Venta Directa + EK</div>
+          <div style="font-size:22px;font-weight:700;color:var(--teal)">${fmtN(actFormales)}</div>
+          <div style="font-size:11px;color:var(--text3)">VD: ${fmtN(actFormalesVD)} · EK: ${fmtN(actFormalesEK)}</div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:2px">Reservas nuevas (pipeline)</div>
+          <div style="font-size:22px;font-weight:700;color:var(--amber)">${fmtN(resNuevasMTD)}</div>
+          <div style="font-size:11px;color:var(--text3)">Modo=Reserva · Total=$10 · pendientes activar</div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:2px">% activaciones vs total</div>
+          <div style="font-size:22px;font-weight:700;color:var(--indigo)">${convRate}</div>
+          <div style="font-size:11px;color:var(--text3)">activos / (activos + reservas)</div>
+        </div>
+      </div>
+    </div>`,
     kpiCard('Activos residencial', fmtN(kpis.activosResid), 'estado En proceso en Odoo',''),
     kpiCard('Activos Wishup', fmtN(kpis.wishupActivos),
       'estado Activo · delta vs Odoo: ' + (kpis.wishupActivos - kpis.activosResid > 0 ? '+' : '') + fmtN(kpis.wishupActivos - kpis.activosResid),''),
@@ -3117,11 +3240,107 @@ function renderChartNetasResid(kpis) {
   });
 }
 
+/* ─── VENTAS POR DÍA POR PROYECTO — mes actual ─────────────────── */
+function renderChartVentasDiaProy(kpis) {
+  const dpData = kpis.ventasDiaProy || {};
+  const days   = Object.keys(dpData).sort();
+  if (!days.length) {
+    // No hay datos MTD aún — mostrar mensaje
+    const canvas = document.getElementById('chart-ventas-dia-proy');
+    if (canvas && canvas.parentNode) {
+      canvas.parentNode.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text3);font-size:12px">Sin ventas registradas en el mes actual</div>';
+    }
+    return;
+  }
+
+  // Top 5 proyectos por total de ventas en el mes
+  const proyCounts = {};
+  days.forEach(d => {
+    Object.entries(dpData[d]).forEach(([p,n]) => { proyCounts[p] = (proyCounts[p]||0) + n; });
+  });
+  const topProys = Object.entries(proyCounts).sort((a,b)=>b[1]-a[1]).slice(0,5).map(e=>e[0]);
+
+  const labels = days.map(d => {
+    const [,, dia] = d.split('-');
+    return 'D' + parseInt(dia);
+  });
+
+  const COLORS = [
+    'rgba(99,102,241,0.80)',
+    'rgba(20,184,166,0.75)',
+    'rgba(245,158,11,0.75)',
+    'rgba(167,139,250,0.75)',
+    'rgba(248,113,113,0.70)'
+  ];
+
+  const datasets = topProys.map((p,i) => ({
+    label: p.length > 20 ? p.slice(0,18)+'…' : p,
+    data: days.map(d => dpData[d]?.[p] || 0),
+    backgroundColor: COLORS[i],
+    borderRadius: 3,
+    stack: 'a'
+  }));
+
+  // Línea total acumulado por día
+  const totals = days.map(d => kpis.ventasDiaTotales?.[d] || 0);
+  datasets.push({
+    label:'Total día',
+    data: totals,
+    type:'line',
+    borderColor:'rgba(15,23,42,0.55)',
+    borderWidth:1.5,
+    pointRadius:3,
+    pointBackgroundColor:'rgba(15,23,42,0.55)',
+    fill:false,
+    tension:0.3,
+    yAxisID:'yLine'
+  });
+
+  // Actualizar subtitle con proyectos incluidos
+  const subEl = document.getElementById('ventas-dia-sub');
+  if (subEl) subEl.textContent = `VD + EK · top 5 proyectos · ${days.length} días con ventas`;
+
+  mkChart('chart-ventas-dia-proy','bar',{ labels, datasets },{
+    plugins:{
+      legend:{labels:{color:'#64748b',boxWidth:10,font:{size:10}}},
+      tooltip:{callbacks:{
+        title: ctx => {
+          const d = days[ctx[0]?.dataIndex];
+          const t = kpis.ventasDiaTotales?.[d] || 0;
+          return `${days[ctx[0]?.dataIndex]} · Total: ${t} ventas`;
+        },
+        label: ctx => ctx.dataset.type === 'line'
+          ? ` Total: ${ctx.parsed.y}`
+          : ` ${ctx.dataset.label}: ${ctx.parsed.y}`
+      }}
+    },
+    scales:{
+      x:{ticks:{color:'#64748b',font:{size:10}},grid:{color:'#e2e8f0'},stacked:true},
+      y:{ticks:{color:'#64748b',font:{size:10}},grid:{color:'#e2e8f0'},stacked:true},
+      yLine:{display:false,position:'right'}
+    },
+    onClick:(e,elements) => {
+      if (!elements.length) return;
+      const dayKey = days[elements[0].index];
+      if (!dayKey) return;
+      const dayData = dpData[dayKey] || {};
+      const sorted  = Object.entries(dayData).sort((a,b)=>b[1]-a[1]);
+      const rows = sorted.map(([p,n]) => `<tr><td class="td-main">${p}</td><td class="td-num">${fmtN(n)}</td></tr>`).join('');
+      const tot = Object.values(dayData).reduce((s,v)=>s+v,0);
+      openModal(`Ventas ${dayKey} — ${fmtN(tot)} ventas`,
+        `<div class="table-wrap"><table>
+          <thead><tr><th>Proyecto</th><th class="td-num">Ventas</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table></div>`);
+    },
+    onHover:(e,el,c)=>{ c.canvas.style.cursor=el.length?'pointer':'default'; }
+  },'chart-ventas-dia-proy',`Ventas por día - ${kpis.mesActualKey||''}`);
+}
+
 function renderTablaInstProyecto(kpis) {
   const ip = kpis.instProyecto || {};
   const total = Object.values(ip).reduce((s,v)=>s+v,0);
-  const sorted = Object.entries(ip).sort((a,b)=>b[1]-a[1]);
-  const ulm = kpis.ultiMesInst || '';
+  const ulm   = kpis.ultiMesInst || '';
   document.getElementById('resid-mes-label').textContent = ulm;
 
   // Acumulado año
@@ -3129,14 +3348,46 @@ function renderTablaInstProyecto(kpis) {
   const anio = ulm.split('-')[0];
   ds_helper_instByProy(anio, acumAnio);
 
+  // Comparativo: mes actual vs promedio últimos 3 meses (desde ventasMesProy)
+  const ventasMesProy = kpis.ventasMesProy || {};
+  const mesesRef4     = kpis.mesesRef4 || [];
+  const mesActRef     = mesesRef4[0] || '';           // mes actual
+  const mes3prev      = mesesRef4.slice(1, 4);         // [prev1, prev2, prev3]
+  const ventasActProy = ventasMesProy[mesActRef] || {};
+
+  // Unión de proyectos (Wishup + pedidos)
+  const allProys = new Set([...Object.keys(ip), ...Object.keys(ventasActProy)]);
+
+  // Prom 3m por proyecto desde ventasMesProy
+  const prom3m = {};
+  allProys.forEach(p => {
+    const vals = mes3prev.map(m => (ventasMesProy[m]||{})[p] || 0).filter(v => v > 0);
+    prom3m[p]  = vals.length > 0 ? vals.reduce((s,v)=>s+v,0) / vals.length : null;
+  });
+
+  // Ordenar por instalaciones Wishup (mes actual) desc
+  const sorted = [...allProys]
+    .map(p => [p, ip[p] || 0])
+    .sort((a,b) => b[1]-a[1]);
+
   const tbody = document.querySelector('#tbl-inst-proyecto tbody');
-  tbody.innerHTML = sorted.map(([proy, n]) => `
-    <tr>
+  tbody.innerHTML = sorted.map(([proy, n]) => {
+    const actOdoo = ventasActProy[proy] || 0;
+    const p3      = prom3m[proy];
+    const delta   = p3 !== null && p3 > 0 ? (actOdoo - p3) / p3 : null;
+    const deltaCell = delta !== null
+      ? `<span class="kc-delta ${delta>=0?'pos':'neg'}">${delta>=0?'▲':'▼'} ${Math.abs(delta*100).toFixed(0)}%</span>`
+      : '<span style="color:var(--text3)">—</span>';
+    const promCell = p3 !== null ? p3.toFixed(1) : '—';
+    return `<tr>
       <td class="td-main">${proy}</td>
-      <td class="td-num">${fmtN(n)}</td>
+      <td class="td-num" title="Wishup instalaciones">${fmtN(n)}</td>
       <td class="td-num">${(total > 0 ? n/total*100 : 0).toFixed(1)}%</td>
+      <td class="td-num" title="Prom. ventas Odoo últimos 3 meses">${promCell}</td>
+      <td class="td-num">${deltaCell}</td>
       <td class="td-num">${fmtN(acumAnio[proy]||0)}</td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
 }
 
 function ds_helper_instByProy(anio, out) {
