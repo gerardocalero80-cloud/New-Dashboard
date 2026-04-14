@@ -5333,10 +5333,10 @@ function guardarCache(ds) {
     const kpis = ds.kpis;
     if (!kpis) return false;
 
-    // Acotar arrays grandes para no exceder localStorage (~5MB)
+    // ── Recortar todos los arrays grandes antes de serializar ──
     const kpisCache = Object.assign({}, kpis);
 
-    // reservasPurasData: solo columnas necesarias para tabla y drill-down
+    // reservasPurasData → solo columnas esenciales
     if (kpisCache.reservasPurasData) {
       kpisCache.reservasPurasData = kpisCache.reservasPurasData.map(r => ({
         'Referencia del pedido': r['Referencia del pedido'],
@@ -5347,21 +5347,59 @@ function guardarCache(ds) {
         'Fecha de Creación':     r['Fecha de Creación'],
       }));
     }
-
-    // matchResults: cap a 2000 para ahorrar espacio
-    if (kpisCache.matchResults && kpisCache.matchResults.length > 2000) {
-      kpisCache.matchResults = kpisCache.matchResults.slice(0, 2000);
+    // suspendidosCache → recortar a campos mínimos (es el array más grande ~1200 rows)
+    if (kpisCache.suspendidosCache) {
+      kpisCache.suspendidosCache = kpisCache.suspendidosCache.map(r => ({
+        'Referencia del pedido':       r['Referencia del pedido'],
+        'Nombre del Cliente':          r['Nombre del Cliente'],
+        'Proyectos':                   r['Proyectos'],
+        'Total recurrente':            r['Total recurrente'],
+        'Fecha de la próxima factura': r['Fecha de la próxima factura'],
+      }));
+    }
+    // contVencer90 → solo campos clave para tabla (es el array acumulativo)
+    ['contVencer30','contVencer60','contVencer90'].forEach(key => {
+      if (kpisCache[key]) {
+        kpisCache[key] = kpisCache[key].map(r => ({
+          'Referencia del pedido':            r['Referencia del pedido'],
+          'Nombre del Cliente':               r['Nombre del Cliente'] || r['Cliente'],
+          'Proyectos':                        r['Proyectos'],
+          'Plan recurrente':                  r['Plan recurrente'],
+          'Total recurrente':                 r['Total recurrente'],
+          'Fecha de Terminación de contrato': r['Fecha de Terminación de contrato'],
+        }));
+      }
+    });
+    // pymeActivos / corpActivos → solo campos para tabla
+    ['pymeActivos','corpActivos'].forEach(key => {
+      if (kpisCache[key]) {
+        kpisCache[key] = kpisCache[key].map(r => ({
+          'Referencia del pedido': r['Referencia del pedido'],
+          'Nombre del Cliente':    r['Nombre del Cliente'] || r['Cliente'],
+          'Plan recurrente':       r['Plan recurrente'],
+          'Total recurrente':      r['Total recurrente'],
+          'Estado de la suscripción': r['Estado de la suscripción'],
+        }));
+      }
+    });
+    // matchResults → cap 1000
+    if (kpisCache.matchResults?.length > 1000) {
+      kpisCache.matchResults = kpisCache.matchResults.slice(0, 1000);
+    }
+    // reservasCriticas → cap 500
+    if (kpisCache.reservasCriticas?.length > 500) {
+      kpisCache.reservasCriticas = kpisCache.reservasCriticas.slice(0, 500);
     }
 
-    // Eliminar objetos no serializables (Sets, Functions)
+    // Eliminar objetos no serializables
     kpisCache.refsPyme = undefined;
     kpisCache.refsCorp = undefined;
     kpisCache.clasificarProducto = undefined;
     kpisCache.fechaCorte = kpisCache.fechaCorte?.toISOString?.() || kpisCache.fechaCorte;
 
     const payload = JSON.stringify(kpisCache);
-    const mb = (payload.length / (1024*1024)).toFixed(1);
-    console.log(`Cache: ${mb} MB`);
+    const mb = (payload.length / (1024*1024)).toFixed(2);
+    console.log(`💾 Cache guardado: ${mb} MB`);
 
     localStorage.setItem(CACHE_KEY, payload);
     localStorage.setItem(CACHE_META, JSON.stringify({
@@ -5377,24 +5415,49 @@ function guardarCache(ds) {
         penetracion:   ds.penetracion?.length   || 0,
       }
     }));
+    console.log(`✅ Cache guardado correctamente (${mb} MB)`);
     return true;
   } catch(e) {
-    console.warn('localStorage error:', e.message);
-    // Si es QuotaExceeded, intentar guardar solo lo esencial
+    console.warn('❌ localStorage error:', e.message);
+    // Fallback: guardar solo KPIs agregados (sin arrays de detalle)
     try {
-      const mini = {
-        mrrMes:      window.DS.kpis?.mrrMes,
-        instMes:     window.DS.kpis?.instMes,
-        bajasMes:    window.DS.kpis?.bajasMes,
-        ventasMes:   window.DS.kpis?.ventasMes,
-        fechaCorteStr: window.DS.kpis?.fechaCorteStr,
+      const esencial = {
+        ventasMes:      kpis.ventasMes,
+        instMes:        kpis.instMes,
+        bajasMes:       kpis.bajasMes,
+        mrrMes:         kpis.mrrMes,
+        ventasDiaProy:  kpis.ventasDiaProy,
+        ventasMesProy:  kpis.ventasMesProy,
+        mesesRef4:      kpis.mesesRef4,
+        resNuevasMes:   kpis.resNuevasMes,
+        instProyecto:   kpis.instProyecto,
+        bajasPorMotivo: kpis.bajasPorMotivo,
+        bajasPorProy:   kpis.bajasPorProy,
+        planesPorVencer:kpis.planesPorVencer,
+        // KPIs escalares
+        activosResid: kpis.activosResid, totalActivos: kpis.totalActivos,
+        wishupActivos: kpis.wishupActivos, totalSuspendidos: kpis.totalSuspendidos,
+        bajasUltimoMes: kpis.bajasUltimoMes, mrrUltimoMes: kpis.mrrUltimoMes,
+        instUltimoMes: kpis.instUltimoMes, ultiMesInst: kpis.ultiMesInst,
+        mtdVentas: kpis.mtdVentas, paceVentas: kpis.paceVentas,
+        diaCorte: kpis.diaCorte, mesActualKey: kpis.mesActualKey,
+        mesPrevKey: kpis.mesPrevKey, diasDelMes: kpis.diasDelMes,
+        fechaCorteStr: kpis.fechaCorteStr,
+        fechaCorte: kpis.fechaCorte?.toISOString?.() || kpis.fechaCorte,
+        mrrVencer90: kpis.mrrVencer90, churnRate: kpis.churnRate,
       };
-      localStorage.setItem(CACHE_KEY, JSON.stringify(mini));
+      localStorage.setItem(CACHE_KEY, JSON.stringify(esencial));
       localStorage.setItem(CACHE_META, JSON.stringify({
-        ts: new Date().toISOString(), fuente: 'manual', mini: true
+        ts: new Date().toISOString(), fuente: ds._fuente||'manual',
+        mb: 'fallback', fechaCorteStr: kpis.fechaCorteStr||'',
+        filas: { asiento: ds.asiento?.length||0, clientes: ds.clientes?.length||0 }
       }));
+      console.log('⚠️ Cache guardado en modo fallback (sin detalle)');
       return true;
-    } catch(e2) { return false; }
+    } catch(e2) {
+      console.error('❌ Cache falló completamente:', e2.message);
+      return false;
+    }
   }
 }
 
