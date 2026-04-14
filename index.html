@@ -1822,15 +1822,22 @@ function calcKPIs() {
   kpis.diasMesActual  = diasMesActual;
   kpis.pctMesTranscurrido = +(kpis.diaCorte / diasMesActual * 100).toFixed(1);
 
-  /* ── Refs PYME / Corp (por Tipo de Cliente) ── */
+  /* ── Refs PYME / Corp (Agencia=Oficina Central + Tipo de Cliente) ── */
+  // PYME y Corporativo se facturan bajo Agencias = "Oficina Central"
   const refsPyme = new Set(
     ds.suscripciones
-      .filter(r => String(r['Tipo de Cliente.-.']||'').toLowerCase() === 'pyme')
+      .filter(r =>
+        String(r['Agencias']||'').toLowerCase() === 'oficina central' &&
+        String(r['Tipo de Cliente.-.']||'').toLowerCase() === 'pyme'
+      )
       .map(r => r['Referencia del pedido']).filter(Boolean)
   );
   const refsCorp = new Set(
     ds.suscripciones
-      .filter(r => String(r['Tipo de Cliente.-.']||'').toLowerCase() === 'corporativos')
+      .filter(r =>
+        String(r['Agencias']||'').toLowerCase() === 'oficina central' &&
+        String(r['Tipo de Cliente.-.']||'').toLowerCase() === 'corporativos'
+      )
       .map(r => r['Referencia del pedido']).filter(Boolean)
   );
   kpis.refsPyme = refsPyme;
@@ -2008,18 +2015,19 @@ function calcKPIs() {
     return isNaN(d) ? null : d;
   }
 
-  /* ── VENTAS POR DÍA POR PROYECTO — mes actual (Odoo · Fecha de Creación · VD+EK residencial) ── */
+  /* ── VENTAS POR DÍA POR PROYECTO — mes actual (Odoo · Fecha de Creación · VD+Reservas+EK · Agencia≠central) ── */
   const ventasDiaProy    = {};  // { 'YYYY-MM-DD': { proyecto: count } }
   const ventasDiaTotales = {};  // { 'YYYY-MM-DD': count }
   pedidosOp.filter(r => {
     const d       = toDate(r['Fecha de Creación']);
     const modo    = String(r['Modo de Venta']||'');
     const agencia = String(r['Agencias']||'').toLowerCase();
-    const tipo    = String(r['Tipo de Cliente.-.']||r['Tipo de Cliente']||'').toLowerCase();
+    const monto   = toNum(r['Total']);
     return d && mesKey(d) === mesActualKey &&
-           (modo === 'Venta Directa' || modo === 'Entrega de Llave') &&
-           agencia !== 'oficina central' &&  // excluir Corp
-           tipo    !== 'pyme';               // excluir PYME
+           agencia !== 'oficina central' &&  // Residencial: excluir PYME y Corp
+           (modo === 'Venta Directa' ||
+            modo === 'Entrega de Llave' ||
+            (modo === 'Reserva' && monto === 10));  // Reserva formal = depósito $10
   }).forEach(r => {
     const d      = toDate(r['Fecha de Creación']);
     const dayKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -2112,9 +2120,11 @@ function calcKPIs() {
   kpis.totalActivos = subsActivas.length;
 
   // Activos residencial
-  const subResid = subsActivas.filter(r => String(r['Tipo de Cliente.-.']||'').toLowerCase() === 'residenciales');
-  const subPyme  = subsActivas.filter(r => String(r['Tipo de Cliente.-.']||'').toLowerCase() === 'pyme');
-  const subCorp  = subsActivas.filter(r => String(r['Tipo de Cliente.-.']||'').toLowerCase() === 'corporativos');
+  // Segmentación por Agencias: Residencial = todos excepto Oficina Central
+  // PYME y Corporativo se facturan bajo Agencia = Oficina Central
+  const subResid = subsActivas.filter(r => String(r['Agencias']||'').toLowerCase() !== 'oficina central');
+  const subPyme  = subsActivas.filter(r => String(r['Agencias']||'').toLowerCase() === 'oficina central' && String(r['Tipo de Cliente.-.']||'').toLowerCase() === 'pyme');
+  const subCorp  = subsActivas.filter(r => String(r['Agencias']||'').toLowerCase() === 'oficina central' && String(r['Tipo de Cliente.-.']||'').toLowerCase() === 'corporativos');
 
   kpis.activosResid = subResid.length;
   kpis.activosPyme  = subPyme.length;
@@ -2146,7 +2156,7 @@ function calcKPIs() {
   // Suspendidos residencial
   const suspendidos = ds.suscripciones.filter(r =>
     String(r['Estado de la suscripción']||'') === 'Suspendido por falta de pago' &&
-    String(r['Tipo de Cliente.-.']||'').toLowerCase() === 'residenciales'
+    String(r['Agencias']||'').toLowerCase() !== 'oficina central'
   );
   // Wishup activos — calculado en KPI engine (Estado tiene espacios → strip)
   kpis.wishupActivos      = ds.clientes.filter(r => String(r['Estado']||'').trim() === 'Activo').length;
@@ -2169,7 +2179,7 @@ function calcKPIs() {
   // Bajas por mes
   const bajasMes = {};
   ds.suscripciones.filter(r => {
-    if (String(r['Tipo de Cliente.-.']||'').toLowerCase() !== 'residenciales') return false;
+    if (String(r['Agencias']||'').toLowerCase() === 'oficina central') return false;
     const fb = r['Fecha de Baja'];
     if (!fb || fb === '' || fb === null) return false;
     return true;
@@ -2490,7 +2500,7 @@ function calcKPIs() {
   const hoy90  = new Date(hoy); hoy90.setDate(hoy90.getDate()+90);
 
   const contVencer30 = [], contVencer60 = [], contVencer90 = [];
-  subsActivas.filter(r => String(r['Tipo de Cliente.-.']||'').toLowerCase() === 'residenciales')
+  subsActivas.filter(r => String(r['Agencias']||'').toLowerCase() !== 'oficina central')
     .forEach(r => {
       const ft = toDate(r['Fecha de Terminación de contrato']);
       if (!ft) return;
@@ -2515,7 +2525,7 @@ function calcKPIs() {
   const bajasPorProy = {};
   const hoyMinus6 = new Date(hoy); hoyMinus6.setMonth(hoyMinus6.getMonth()-6);
   ds.suscripciones.filter(r => {
-    if (String(r['Tipo de Cliente.-.']||'').toLowerCase() !== 'residenciales') return false;
+    if (String(r['Agencias']||'').toLowerCase() === 'oficina central') return false;
     const fb = r['Fecha de Baja'];
     if (!fb || fb === '') return false;
     const d = toDate(fb);
@@ -2626,9 +2636,9 @@ function calcKPIs() {
   }).sort((a,b) => toDate(a['Fecha de Creación']) - toDate(b['Fecha de Creación']));
 
   /* ── CONCILIACIÓN ODOO-WISHUP ── */
-  // Activos Odoo por proyecto
+  // Activos Odoo por proyecto (residencial = Agencias ≠ Oficina Central)
   const odooActPorProy = {};
-  subsActivas.filter(r => String(r['Tipo de Cliente.-.']||'').toLowerCase() === 'residenciales')
+  subsActivas.filter(r => String(r['Agencias']||'').toLowerCase() !== 'oficina central')
     .forEach(r => {
       const p = String(r['Proyectos']||'Sin proyecto').trim();
       odooActPorProy[p] = (odooActPorProy[p]||0) + 1;
@@ -2668,9 +2678,9 @@ function calcKPIs() {
     whIdx[n].push(i);
   });
 
-  // Matchear cada suscripción activa Odoo
+  // Matchear cada suscripción activa Odoo (residencial = Agencias ≠ Oficina Central)
   const matchResults = [];
-  subsActivas.filter(r => String(r['Tipo de Cliente.-.']||'').toLowerCase() === 'residenciales')
+  subsActivas.filter(r => String(r['Agencias']||'').toLowerCase() !== 'oficina central')
     .slice(0, 3000) // cap para performance en browser
     .forEach(r => {
       const refOdoo    = r['Referencia del pedido'] || '';
@@ -4074,7 +4084,7 @@ function renderMora() {
     : (kpis.suspendidosCache || []);
   suspSource.filter(r =>
     String(r['Estado de la suscripción']||'') === 'Suspendido por falta de pago' &&
-    String(r['Tipo de Cliente.-.']||'').toLowerCase() === 'residenciales'
+    String(r['Agencias']||'').toLowerCase() !== 'oficina central'
   ).forEach(r => {
     const pf = r['Fecha de la próxima factura'] ? new Date(r['Fecha de la próxima factura']) : null;
     if (!pf) return;
@@ -4106,7 +4116,7 @@ function renderMora() {
       }
       const clientes = subs.filter(r => {
         if (String(r['Estado de la suscripción']||'') !== 'Suspendido por falta de pago') return false;
-        if (String(r['Tipo de Cliente.-.']||'').toLowerCase() !== 'residenciales') return false;
+        if (String(r['Agencias']||'').toLowerCase() === 'oficina central') return false;
         const pf = r['Fecha de la próxima factura'] ? new Date(r['Fecha de la próxima factura']) : null;
         if (!pf) return false;
         const m = (hoy2 - pf) / (1000*60*60*24*30);
