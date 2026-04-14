@@ -2015,11 +2015,12 @@ function calcKPIs() {
     return isNaN(d) ? null : d;
   }
 
-  /* ── VENTAS POR DÍA POR PROYECTO — mes actual (Odoo · Fecha de Creación · VD+Reservas+EK · Agencia≠central) ── */
+  /* ── VENTAS POR DÍA POR PROYECTO — mes actual (Odoo · Fecha de Instalación · VD+Reservas+EK · Agencia≠central) ── */
+  // Usa Fecha de Instalación (cuando inicia la facturación) en lugar de Fecha de Creación (cuando se vende)
   const ventasDiaProy    = {};  // { 'YYYY-MM-DD': { proyecto: count } }
   const ventasDiaTotales = {};  // { 'YYYY-MM-DD': count }
   pedidosOp.filter(r => {
-    const d       = toDate(r['Fecha de Creación']);
+    const d       = parseFechaInst(r['Fecha de Instalación'] || r['Fecha instalación'] || r['fecha_instalacion']);
     const modo    = String(r['Modo de Venta']||'');
     const agencia = String(r['Agencias']||'').toLowerCase();
     const monto   = toNum(r['Total']);
@@ -2029,7 +2030,7 @@ function calcKPIs() {
             modo === 'Entrega de Llave' ||
             (modo === 'Reserva' && monto === 10));  // Reserva formal = depósito $10
   }).forEach(r => {
-    const d      = toDate(r['Fecha de Creación']);
+    const d      = parseFechaInst(r['Fecha de Instalación'] || r['Fecha instalación'] || r['fecha_instalacion']);
     const dayKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
     const proy   = String(r['Proyectos']||'Sin proyecto').trim() || 'Sin proyecto';
     if (!ventasDiaProy[dayKey]) ventasDiaProy[dayKey] = {};
@@ -2575,12 +2576,18 @@ function calcKPIs() {
     ).map(r => r['Cliente'])
   );
 
-  // Reservas formales: Modo='Reserva' + Total exacto $10 (depósito de reserva)
-  const reservasPuras = ds.pedidos.filter(r =>
-    String(r['Estado']||'') === 'Pedido de venta' &&
-    String(r['Modo de Venta']||'') === 'Reserva' &&
-    toNum(r['Total']) === 10
-  );
+  // Reservas formales: Modo='Reserva' + Total=$10 (depósito) + Estado de factura='Facturado'
+  // (según reglas: se contabilizan cuando están facturadas)
+  const reservasPuras = ds.pedidos.filter(r => {
+    const estado = String(r['Estado']||'').trim();
+    const modo = String(r['Modo de Venta']||'').trim();
+    const total = toNum(r['Total']);
+    const estadoFact = String(r['Estado de la factura']||r['Estado de Factura']||'').trim();
+    return estado === 'Pedido de venta' &&
+           modo === 'Reserva' &&
+           total === 10 &&
+           (estadoFact === 'Facturado' || estadoFact === 'facturado');
+  });
 
   // Pipeline por antigüedad
   const resPipeline = { '0-6m':0, '6-12m':0, '12-18m':0, '+18m':0 };
@@ -2604,13 +2611,18 @@ function calcKPIs() {
   kpis.resPorProy = resPorProy;
 
   // Nuevas reservas por mes
-  // Nuevas reservas por mes — mismo filtro: Modo='Reserva' + Total=$10
+  // Nuevas reservas por mes — mismo filtro: Modo='Reserva' + Total=$10 + Estado de factura='Facturado'
   const resNuevasMes = {};
-  ds.pedidos.filter(r =>
-    String(r['Estado']||'') === 'Pedido de venta' &&
-    String(r['Modo de Venta']||'') === 'Reserva' &&
-    toNum(r['Total']) === 10
-  ).forEach(r => {
+  ds.pedidos.filter(r => {
+    const estado = String(r['Estado']||'').trim();
+    const modo = String(r['Modo de Venta']||'').trim();
+    const total = toNum(r['Total']);
+    const estadoFact = String(r['Estado de la factura']||r['Estado de Factura']||'').trim();
+    return estado === 'Pedido de venta' &&
+           modo === 'Reserva' &&
+           total === 10 &&
+           (estadoFact === 'Facturado' || estadoFact === 'facturado');
+  }).forEach(r => {
     const d = toDate(r['Fecha de Creación']);
     if (!d) return;
     const k = mesKey(d);
