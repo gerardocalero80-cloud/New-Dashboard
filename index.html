@@ -801,7 +801,7 @@ tbody td.td-warn { color: var(--amber); }
           <div class="cc-header">
             <div>
               <div class="cc-title">Ventas por día — mes actual</div>
-              <div class="cc-sub" id="ventas-dia-sub">VD + EK por proyecto · top 5</div>
+              <div class="cc-sub" id="ventas-dia-sub">Odoo · Fecha de pedido · VD + EK residencial · top 5 proyectos</div>
             </div>
           </div>
           <div style="position:relative">
@@ -815,7 +815,7 @@ tbody td.td-warn { color: var(--amber); }
       <div class="chart-row cols-1">
         <div class="chart-card">
           <div class="section-header">
-            <div class="section-title">Ventas por proyecto — mes actual vs promedio 3 meses</div>
+            <div class="section-title">Instalaciones por proyecto — mes actual vs promedio 3 meses</div>
             <div class="section-meta" id="resid-mes-label"></div>
           </div>
           <div class="table-wrap">
@@ -1997,9 +1997,20 @@ function calcKPIs() {
   });
   kpis.canalData = canalData;
 
-  /* ── VENTAS POR DÍA POR PROYECTO — mes actual MTD (VD + EK, solo RESIDENCIAL) ── */
-  const ventasDiaProy = {};   // { 'YYYY-MM-DD': { proyecto: count } }
-  const ventasDiaTotales = {}; // { 'YYYY-MM-DD': count }
+  // Helper para parsear Fecha Instalación de Wishup (reutilizable)
+  function parseFechaInst(raw) {
+    if (!raw) return null;
+    if (raw instanceof Date) return isNaN(raw) ? null : raw;
+    const s = String(raw).trim();
+    const p = s.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+    if (p) return new Date(`${p[3]}-${p[2]}-${p[1]}`);
+    const d = new Date(s);
+    return isNaN(d) ? null : d;
+  }
+
+  /* ── VENTAS POR DÍA POR PROYECTO — mes actual (Odoo · Fecha de Creación · VD+EK residencial) ── */
+  const ventasDiaProy    = {};  // { 'YYYY-MM-DD': { proyecto: count } }
+  const ventasDiaTotales = {};  // { 'YYYY-MM-DD': count }
   pedidosOp.filter(r => {
     const d       = toDate(r['Fecha de Creación']);
     const modo    = String(r['Modo de Venta']||'');
@@ -2007,53 +2018,40 @@ function calcKPIs() {
     const tipo    = String(r['Tipo de Cliente.-.']||r['Tipo de Cliente']||'').toLowerCase();
     return d && mesKey(d) === mesActualKey &&
            (modo === 'Venta Directa' || modo === 'Entrega de Llave') &&
-           agencia !== 'oficina central' &&   // excluir Corp
-           tipo    !== 'pyme';                // excluir PYME
+           agencia !== 'oficina central' &&  // excluir Corp
+           tipo    !== 'pyme';               // excluir PYME
   }).forEach(r => {
-    const d = toDate(r['Fecha de Creación']);
+    const d      = toDate(r['Fecha de Creación']);
     const dayKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-    const proy = String(r['Proyectos']||'Sin proyecto').trim() || 'Sin proyecto';
+    const proy   = String(r['Proyectos']||'Sin proyecto').trim() || 'Sin proyecto';
     if (!ventasDiaProy[dayKey]) ventasDiaProy[dayKey] = {};
-    ventasDiaProy[dayKey][proy] = (ventasDiaProy[dayKey][proy]||0) + 1;
-    ventasDiaTotales[dayKey] = (ventasDiaTotales[dayKey]||0) + 1;
+    ventasDiaProy[dayKey][proy]  = (ventasDiaProy[dayKey][proy]||0) + 1;
+    ventasDiaTotales[dayKey]     = (ventasDiaTotales[dayKey]||0) + 1;
   });
-  kpis.ventasDiaProy   = ventasDiaProy;
+  kpis.ventasDiaProy    = ventasDiaProy;
   kpis.ventasDiaTotales = ventasDiaTotales;
 
-  /* ── VENTAS VD+EK POR PROYECTO — últimos 4 meses, solo RESIDENCIAL ── */
-  const ventasMesProy = {}; // { 'YYYY-MM': { proyecto: count } }
+  /* ── INSTALACIONES POR PROYECTO — últimos 4 meses (Wishup · Fecha Instalación) ── */
   const mesesRef4 = [];
   for (let i = 0; i < 4; i++) {
     const dRef = new Date(anioMTD, mesMTDnum - 1 - i, 1);
     mesesRef4.push(`${dRef.getFullYear()}-${String(dRef.getMonth()+1).padStart(2,'0')}`);
   }
-  pedidosOp.filter(r => {
-    const modo    = String(r['Modo de Venta']||'');
-    const agencia = String(r['Agencias']||'').toLowerCase();
-    const tipo    = String(r['Tipo de Cliente.-.']||r['Tipo de Cliente']||'').toLowerCase();
-    return (modo === 'Venta Directa' || modo === 'Entrega de Llave') &&
-           agencia !== 'oficina central' &&   // excluir Corp
-           tipo    !== 'pyme';                // excluir PYME
-  }).forEach(r => {
-    const d = toDate(r['Fecha de Creación']);
+  const ventasMesProy = {}; // { 'YYYY-MM': { proyecto: count } }
+  ds.clientes.forEach(r => {
+    const d = parseFechaInst(r['Fecha Instalación'] || r['Fecha instalación']);
     if (!d) return;
     const k = mesKey(d);
     if (!mesesRef4.includes(k)) return;
-    const proy = String(r['Proyectos']||'Sin proyecto').trim() || 'Sin proyecto';
+    const router = String(r['Router']||'');
+    const proy   = router.split('//')[0].split('/')[0].trim() || 'Sin proyecto';
     if (!ventasMesProy[k]) ventasMesProy[k] = {};
     ventasMesProy[k][proy] = (ventasMesProy[k][proy]||0) + 1;
   });
   kpis.ventasMesProy = ventasMesProy;
   kpis.mesesRef4     = mesesRef4; // [mesActual, prev1, prev2, prev3]
 
-  // Activaciones MTD separadas: VD+EK formales vs Reservas nuevas (Total=$10)
-  kpis.actFormalesMTD = (ventasMesProy[mesActualKey]?.vd||0) +
-    pedidosOp.filter(r => {
-      const d = toDate(r['Fecha de Creación']);
-      const modo = String(r['Modo de Venta']||'');
-      return d && mesKey(d) === mesActualKey && (modo === 'Venta Directa' || modo === 'Entrega de Llave');
-    }).length;
-  // Corrección: actFormalesMTD = suma directa desde ventasMesProy
+  // Instalaciones MTD residencial (Wishup) — mes actual
   kpis.actFormalesMTD = Object.values(ventasMesProy[mesActualKey]||{}).reduce((s,v)=>s+v,0);
 
   /* ── INSTALACIONES WISHUP ── */
@@ -3156,38 +3154,46 @@ function renderKPIsResidencial(kpis) {
     const [y,m] = mesActKey.split('-');
     return new Date(+y,+m-1,1).toLocaleString('es-SV',{month:'short',year:'numeric'});
   })();
-  // VD+EK solo residencial: usar ventasMesProy (ya filtrado sin Corp/PYME)
-  const ventasMesProyMTD = kpis.ventasMesProy?.[mesActKey] || {};
-  const actFormales    = Object.values(ventasMesProyMTD).reduce((s,v)=>s+v,0);
-  // Desglose VD vs EK residencial desde ventasMes (vd/ek excluyen Corp pero pueden incluir PYME)
-  // Aproximación: proporcionar total residencial desde proy y ratio desde ventasMes
-  const vdTotal = kpis.ventasMes?.[mesActKey]?.vd || 0;
-  const ekTotal = kpis.ventasMes?.[mesActKey]?.ek || 0;
-  const actFormalesVD  = vdTotal;  // muestra VD (excluye Corp, puede incluir PYME mínimo)
-  const actFormalesEK  = ekTotal;  // muestra EK
-  const resNuevasMTD   = kpis.resNuevasMes?.[mesActKey] || 0;
-  const convRate       = (actFormales + resNuevasMTD) > 0
-    ? (actFormales / (actFormales + resNuevasMTD) * 100).toFixed(0) + '%' : '—';
+  // ── VENTAS ODOO: pedidos VD+EK residencial (Fecha de Creación)
+  const ventasOdooVD  = kpis.ventasMes?.[mesActKey]?.vd  || 0;
+  const ventasOdooEK  = kpis.ventasMes?.[mesActKey]?.ek  || 0;
+  const ventasOdoo    = ventasOdooVD + ventasOdooEK;
+
+  // ── INSTALACIONES WISHUP: del mes actual (Fecha Instalación)
+  const instWishup    = kpis.instMes?.[mesActKey] || 0;
+
+  // ── GAP CONCILIACIÓN: ventas sin instalar
+  const gap           = ventasOdoo - instWishup;
+  const gapColor      = gap > 0 ? 'var(--amber)' : gap < 0 ? 'var(--red)' : 'var(--teal)';
+  const gapLabel      = gap > 0 ? `${fmtN(gap)} ventas sin instalar` : gap < 0 ? `${fmtN(Math.abs(gap))} instalaciones sin pedido` : 'Sin brecha ✓';
+
+  // ── RESERVAS PIPELINE (Odoo · Total=$10)
+  const resNuevasMTD  = kpis.resNuevasMes?.[mesActKey] || 0;
 
   const html = [
-    // Bloque activaciones del mes — span 2 columnas
+    // Bloque conciliación Odoo vs Wishup — span 2 columnas
     `<div class="kpi-card" style="grid-column:span 2;background:linear-gradient(135deg,rgba(20,184,166,0.06),rgba(99,102,241,0.04));border-color:rgba(20,184,166,0.35)">
-      <div class="kc-label" style="color:var(--teal);font-weight:600">📦 Activaciones ${mesActLabel2} — desglose</div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:10px">
+      <div class="kc-label" style="color:var(--teal);font-weight:600">🔄 Conciliación ${mesActLabel2} — Odoo (ventas) vs Wishup (instalaciones)</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:10px">
         <div>
-          <div style="font-size:11px;color:var(--text3);margin-bottom:2px">Venta Directa + EK</div>
-          <div style="font-size:22px;font-weight:700;color:var(--teal)">${fmtN(actFormales)}</div>
-          <div style="font-size:11px;color:var(--text3)">VD: ${fmtN(actFormalesVD)} · EK: ${fmtN(actFormalesEK)}</div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:2px">Ventas Odoo VD+EK</div>
+          <div style="font-size:22px;font-weight:700;color:var(--indigo)">${fmtN(ventasOdoo)}</div>
+          <div style="font-size:11px;color:var(--text3)">VD: ${fmtN(ventasOdooVD)} · EK: ${fmtN(ventasOdooEK)} · pedidos residencial</div>
         </div>
         <div>
-          <div style="font-size:11px;color:var(--text3);margin-bottom:2px">Reservas nuevas (pipeline)</div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:2px">Instalaciones Wishup</div>
+          <div style="font-size:22px;font-weight:700;color:var(--teal)">${fmtN(instWishup)}</div>
+          <div style="font-size:11px;color:var(--text3)">Fecha de instalación · mes actual</div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:2px">Brecha (ventas − instaladas)</div>
+          <div style="font-size:22px;font-weight:700;color:${gapColor}">${gap >= 0 ? '+' : ''}${fmtN(gap)}</div>
+          <div style="font-size:11px;color:var(--text3)">${gapLabel}</div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:2px">Reservas pipeline</div>
           <div style="font-size:22px;font-weight:700;color:var(--amber)">${fmtN(resNuevasMTD)}</div>
-          <div style="font-size:11px;color:var(--text3)">Modo=Reserva · Total=$10 · pendientes activar</div>
-        </div>
-        <div>
-          <div style="font-size:11px;color:var(--text3);margin-bottom:2px">% activaciones vs total</div>
-          <div style="font-size:22px;font-weight:700;color:var(--indigo)">${convRate}</div>
-          <div style="font-size:11px;color:var(--text3)">activos / (activos + reservas)</div>
+          <div style="font-size:11px;color:var(--text3)">Modo=Reserva · Total=$10 · por cobrar/instalar</div>
         </div>
       </div>
     </div>`,
@@ -3317,7 +3323,7 @@ function renderChartVentasDiaProy(kpis) {
 
   // Actualizar subtitle con proyectos incluidos
   const subEl = document.getElementById('ventas-dia-sub');
-  if (subEl) subEl.textContent = `VD + EK · top 5 proyectos · ${days.length} días con ventas`;
+  if (subEl) subEl.textContent = `Odoo · Fecha de pedido · VD+EK residencial · top 5 proyectos · ${days.length} días con ventas`;
 
   mkChart('chart-ventas-dia-proy','bar',{ labels, datasets },{
     plugins:{
