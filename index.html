@@ -1937,27 +1937,62 @@ function calcKPIs() {
     r['Modo de Venta'] !== null && r['Modo de Venta'] !== ''
   );
 
-  // Ventas por mes y modo — SUSCRIPCIONES + Fecha de Instalación (cuando inicia facturación)
-  // Fuente correcta: reporte Suscripciones_Odoo con campos Fecha de Instalación, Agencias, Modo de Venta
+  // Ventas por mes y modo
+  // FUENTE PRIMARIA: Suscripciones + Fecha de Instalación + Agencias + Modo de Venta
+  // FALLBACK AUTOMÁTICO: Pedidos + Fecha de Creación (si suscripciones no tiene los campos aún)
   const ventasMes = {};
-  ds.suscripciones.forEach(r => {
-    const d = parseFechaInst(r['Fecha de Instalación'] || r['Fecha instalación'] || r['fecha_instalacion']);
-    if (!d) return;
-    const k      = mesKey(d);
-    const modo   = String(r['Modo de Venta']||'');
-    const agencia= String(r['Agencias']||'').toLowerCase();
-    const monto  = toNum(r['Total recurrente']||0);
-    if (!ventasMes[k]) ventasMes[k] = { total:0, vd:0, reserva:0, ek:0, pyme:0, corp:0, montoVD:0, montoEK:0, montoRes:0, montoPyme:0, montoCorp:0 };
-    if (agencia === 'oficina central') {
-      ventasMes[k].corp++;
-      ventasMes[k].montoCorp += monto;
-    } else {
-      if (modo === 'Venta Directa')        { ventasMes[k].vd++;      ventasMes[k].montoVD  += monto; }
-      else if (modo === 'Reserva')         { ventasMes[k].reserva++; ventasMes[k].montoRes += monto; }
-      else if (modo === 'Entrega de Llave'){ ventasMes[k].ek++;      ventasMes[k].montoEK  += monto; }
-    }
-    ventasMes[k].total++;
-  });
+  const _subsConFechaInst = ds.suscripciones.filter(r =>
+    r['Fecha de Instalación'] || r['Fecha instalación'] || r['fecha_instalacion']
+  );
+  const _subsConModo = ds.suscripciones.filter(r => r['Modo de Venta']);
+  const _usarSubs = _subsConFechaInst.length > 0 && _subsConModo.length > 0;
+  console.log(_usarSubs
+    ? `✅ ventasMes: usando Suscripciones (${_subsConFechaInst.length} con FechaInst, ${_subsConModo.length} con Modo)`
+    : `⚠️ ventasMes: Suscripciones sin FechaInst/Modo → usando Pedidos como fallback`
+  );
+  kpis._ventasMesFuente = _usarSubs ? 'suscripciones' : 'pedidos';
+
+  if (_usarSubs) {
+    // ── FUENTE PRIMARIA: Suscripciones ──
+    ds.suscripciones.forEach(r => {
+      const d = parseFechaInst(r['Fecha de Instalación'] || r['Fecha instalación'] || r['fecha_instalacion']);
+      if (!d) return;
+      const k      = mesKey(d);
+      const modo   = String(r['Modo de Venta']||'');
+      const agencia= String(r['Agencias']||'').toLowerCase();
+      const monto  = toNum(r['Total recurrente']||0);
+      if (!ventasMes[k]) ventasMes[k] = { total:0, vd:0, reserva:0, ek:0, pyme:0, corp:0, montoVD:0, montoEK:0, montoRes:0, montoPyme:0, montoCorp:0 };
+      if (agencia === 'oficina central') {
+        ventasMes[k].corp++;
+        ventasMes[k].montoCorp += monto;
+      } else {
+        if (modo === 'Venta Directa')        { ventasMes[k].vd++;      ventasMes[k].montoVD  += monto; }
+        else if (modo === 'Reserva')         { ventasMes[k].reserva++; ventasMes[k].montoRes += monto; }
+        else if (modo === 'Entrega de Llave'){ ventasMes[k].ek++;      ventasMes[k].montoEK  += monto; }
+      }
+      ventasMes[k].total++;
+    });
+  } else {
+    // ── FALLBACK: Pedidos + Fecha de Creación ──
+    pedidosOp.forEach(r => {
+      const d = toDate(r['Fecha de Creación']);
+      if (!d) return;
+      const k      = mesKey(d);
+      const modo   = String(r['Modo de Venta']||'');
+      const agencia= String(r['Agencias']||'').toLowerCase();
+      const monto  = toNum(r['Total']);
+      if (!ventasMes[k]) ventasMes[k] = { total:0, vd:0, reserva:0, ek:0, pyme:0, corp:0, montoVD:0, montoEK:0, montoRes:0, montoPyme:0, montoCorp:0 };
+      if (agencia === 'oficina central') {
+        ventasMes[k].corp++;
+        ventasMes[k].montoCorp += monto;
+      } else {
+        if (modo === 'Venta Directa')                             { ventasMes[k].vd++;      ventasMes[k].montoVD  += monto; }
+        else if (modo === 'Reserva' && toNum(r['Total']) === 10)  { ventasMes[k].reserva++; ventasMes[k].montoRes += monto; }
+        else if (modo === 'Entrega de Llave')                     { ventasMes[k].ek++;      ventasMes[k].montoEK  += monto; }
+      }
+      ventasMes[k].total++;
+    });
+  }
   kpis.ventasMes = ventasMes;
 
   /* ── VENTAS POR DÍA POR PROYECTO (mes actual MTD) ── */
