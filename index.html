@@ -1937,24 +1937,24 @@ function calcKPIs() {
     r['Modo de Venta'] !== null && r['Modo de Venta'] !== ''
   );
 
-  // Ventas por mes y modo — DESDE SUSCRIPCIONES + Fecha de Instalación (cuando inicia facturación)
-  // Conteo de suscripciones activadas (qty) + monto (Total recurrente como proxy)
+  // Ventas por mes y modo — SUSCRIPCIONES + Fecha de Instalación (cuando inicia facturación)
+  // Fuente correcta: reporte Suscripciones_Odoo con campos Fecha de Instalación, Agencias, Modo de Venta
   const ventasMes = {};
   ds.suscripciones.forEach(r => {
     const d = parseFechaInst(r['Fecha de Instalación'] || r['Fecha instalación'] || r['fecha_instalacion']);
-    if (!d) return;  // Sin fecha de instalación = no cuenta
-    const k = mesKey(d);
-    const modo = String(r['Modo de Venta']||'');  // Heredado del pedido original
+    if (!d) return;
+    const k      = mesKey(d);
+    const modo   = String(r['Modo de Venta']||'');
+    const agencia= String(r['Agencias']||'').toLowerCase();
+    const monto  = toNum(r['Total recurrente']||0);
     if (!ventasMes[k]) ventasMes[k] = { total:0, vd:0, reserva:0, ek:0, pyme:0, corp:0, montoVD:0, montoEK:0, montoRes:0, montoPyme:0, montoCorp:0 };
-    const monto = toNum(r['Total recurrente']||0);  // Usar Total recurrente de suscripción
-    const agencia = String(r['Agencias']||'').toLowerCase();
     if (agencia === 'oficina central') {
       ventasMes[k].corp++;
       ventasMes[k].montoCorp += monto;
     } else {
-      if (modo === 'Venta Directa')    { ventasMes[k].vd++;      ventasMes[k].montoVD  += monto; }
-      else if (modo === 'Reserva')     { ventasMes[k].reserva++; ventasMes[k].montoRes += monto; } // Nota: en suscripciones no filtramos por $10
-      else if (modo === 'Entrega de Llave') { ventasMes[k].ek++; ventasMes[k].montoEK  += monto; }
+      if (modo === 'Venta Directa')        { ventasMes[k].vd++;      ventasMes[k].montoVD  += monto; }
+      else if (modo === 'Reserva')         { ventasMes[k].reserva++; ventasMes[k].montoRes += monto; }
+      else if (modo === 'Entrega de Llave'){ ventasMes[k].ek++;      ventasMes[k].montoEK  += monto; }
     }
     ventasMes[k].total++;
   });
